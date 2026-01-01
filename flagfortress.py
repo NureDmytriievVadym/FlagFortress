@@ -11,9 +11,17 @@ from collections.abc import Callable
 TICKRATE = 100
 TIME_PER_TICK = 1 / TICKRATE
 
-_quit = False
+LEVEL_WIDTH = 30
+LEVEL_HEIGHT = 20
+LEVEL_SCREEN_OFFSET_Y, LEVEL_SCREEN_OFFSET_X = 10, 3
+
+_quit: bool = False
+gamestate: int = 0 # 0 = main menu, 1 = ingame, 2 = paused, 3 = over
 stdscr = None
 
+ammo_left = 4
+level = {}
+last_move = (1, 0)
 event_queue = queue.SimpleQueue()
 
 class GameObject:
@@ -24,28 +32,101 @@ class GameObject:
         self.symbol = symbol
 
 class Event:
-    def __init__(self, name: str, callback: Callable[[list],None], delay_seconds: float):
+    def __init__(self, name: str, delay_seconds: float = 0, params = None):
         self.name = name
-        self.callback = callback
+        self.params = params
         # delay is in ticks
         self.delay = (delay_seconds * TICKRATE).__ceil__()
         self.initial_delay = self.delay
-    
-class InputEvent(Event):
-    def __init__(self, name: str, callback: Callable[[list],None], key: int):
-        Event.__init__(self, name, callback, 0)
-        self.key = key
 
 def handle_input():
     global stdscr
-    c = stdscr.getch()
-    if(c == -1):
+    global last_move
+    c = ""
+    try:
+        c = stdscr.getkey()
+    except:
+        time.sleep(0.01)
+        pass
+        
+    if(c == -1 or c == ""):
         return
     
-    event_queue.put(InputEvent("KeyPressed", lambda a: print(a), c))
+    if(c == "KEY_LEFT"):
+        event_queue.put(Event("PlayerAttemptMove", 0, (-1, 0)))
+        last_move = (-1, 0)
+    if(c == "KEY_RIGHT"):
+        event_queue.put(Event("PlayerAttemptMove", 0, (1, 0)))
+        last_move = (1, 0)
+    if(c == "KEY_UP"):
+        event_queue.put(Event("PlayerAttemptMove", 0, (0, -1)))
+        last_move = (0, -1)
+    if(c == "KEY_DOWN"):
+        event_queue.put(Event("PlayerAttemptMove", 0, (0, 1)))
+        last_move = (0, 1)
+    if(c.lower() == "c"):
+        move = list(last_move)
+        move[0] *= 3
+        move[1] *= 3
+        event_queue.put(Event("PlayerAttemptMove", 0, move))
+    if(c.lower() == "f"):
+        event_queue.put(Event("Shoot", 0))
+
+def initial_render():
+    global stdscr
+    screen_height, screen_width = stdscr.getmaxyx()
+    for i in range(0, screen_width-1):
+        stdscr.addch(0, i, '.')
+    
+    for i in range(0, screen_height-1):
+        stdscr.addch(i, 0, '.')
+
+    for i in range(0, screen_width-1):
+        stdscr.addch(screen_height-1, i, '.')
+    
+    for i in range(0, screen_height-1):
+        stdscr.addch(i, screen_width-1, '.')
+
+    stdscr.addstr(2, 3, "Arrow Keys - Move")
+    stdscr.addstr(3, 3, "C - Dash")
+    stdscr.addstr(4, 3, "F - Shoot")
+    stdscr.addstr(5, 3, f"Ammo left: {ammo_left}")
+    stdscr.addstr(7, 3, "Level: 1")
+    stdscr.addstr(8, 3, "Get the flag!")
+
+    for i in range(LEVEL_WIDTH*2+2):
+        stdscr.addch(LEVEL_SCREEN_OFFSET_Y-1, LEVEL_SCREEN_OFFSET_X-1+i, '#')
+    
+    for i in range(LEVEL_WIDTH*2+2):
+        stdscr.addch(LEVEL_SCREEN_OFFSET_Y + LEVEL_HEIGHT + 1, LEVEL_SCREEN_OFFSET_X-1+i, '#')
+    
+    for i in range(LEVEL_HEIGHT+1):
+        stdscr.addch(LEVEL_SCREEN_OFFSET_Y + i, LEVEL_SCREEN_OFFSET_X-1, '#')
+    
+    for i in range(LEVEL_HEIGHT+1):
+        stdscr.addch(LEVEL_SCREEN_OFFSET_Y + i, LEVEL_SCREEN_OFFSET_X + LEVEL_WIDTH * 2 + 1, '#')
+
+LEVELS = [
+    {
+        "Spawn": GameObject(3, 3, "Spawn", '⭕'),
+        "Flag": GameObject(3, 10, "Flag", '🚩'),
+        "Objects": []
+    }
+]
+
+def load_level(i):
+    global level
+    level = LEVELS[i]
+    level["Player"] = GameObject(level["Spawn"].x, level["Spawn"].y, "Player", "🐛")
+    level["Objects"].append(level["Spawn"])
+    level["Objects"].append(level["Flag"])
+    level["Objects"].append(level["Player"])
+    event_queue.put(Event("InitializeLevel"))
 
 def tick():
+    global stdscr
     global event_queue
+    global ammo_left
 
     repeat_events = []
     while(not event_queue.empty()):
@@ -55,16 +136,26 @@ def tick():
             e.delay -= 1
             continue
         
-        if(type(e) is InputEvent):
-            e.callback([e.key])
-        else:
-            e.callback([None])
+        if(e.name == "InitializeLevel"):
+            stdscr.addch(LEVEL_SCREEN_OFFSET_Y + level["Player"].y, LEVEL_SCREEN_OFFSET_X + level["Player"].x * 2, level["Player"].symbol)
+            stdscr.addch(LEVEL_SCREEN_OFFSET_Y + level["Flag"].y, LEVEL_SCREEN_OFFSET_X + level["Flag"].x * 2, level["Flag"].symbol)
+        
+        if(e.name == "Shoot"):
+            ammo_left -= 1
+            stdscr.addstr(5, 3, f"Ammo left: {ammo_left}")
+
+        if(e.name == "PlayerAttemptMove"):
+            stdscr.addch(LEVEL_SCREEN_OFFSET_Y + level["Player"].y, LEVEL_SCREEN_OFFSET_X + level["Player"].x * 2, " ")
+            for obj in level["Objects"]:
+                if(obj.x == level["Player"].x and obj.y == level["Player"].y and obj != level["Player"]):
+                    stdscr.addch(LEVEL_SCREEN_OFFSET_Y + level["Player"].y, LEVEL_SCREEN_OFFSET_X + level["Player"].x * 2, obj.symbol)
+
+            level["Player"].x += e.params[0]
+            level["Player"].y += e.params[1]
+            stdscr.addch(LEVEL_SCREEN_OFFSET_Y + level["Player"].y, LEVEL_SCREEN_OFFSET_X + level["Player"].x * 2, level["Player"].symbol)
     
     for e in repeat_events:
         event_queue.put(e)
-
-def render():
-    pass
 
 def main(stdscr_in):
     global stdscr
@@ -72,9 +163,16 @@ def main(stdscr_in):
     stdscr = stdscr_in
     stdscr.clear()
     stdscr.nodelay(True)
+    screen_height, screen_width = stdscr.getmaxyx()
+
+    if(screen_height < 30 or screen_width < 60):
+        return 1
 
     lasttime = time.time_ns() / (10 ** 9)
     accumulator = 0
+
+    load_level(0)
+    initial_render()
     while True:
         newtime = time.time_ns() / (10 ** 9)
         deltatime = newtime - lasttime
@@ -87,10 +185,12 @@ def main(stdscr_in):
         while (accumulator >= TIME_PER_TICK):
             tick()
             accumulator -= TIME_PER_TICK
-        
-        render()
 
         if _quit:
             break
+    
+    return 0
 
-curses.wrapper(main)
+retcode = curses.wrapper(main)
+if retcode == 1:
+    print("The console window isn't big enough for the game! Please run the game in a bigger terminal window.")
