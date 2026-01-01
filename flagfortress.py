@@ -25,11 +25,12 @@ last_move = (1, 0)
 event_queue = queue.SimpleQueue()
 
 class GameObject:
-    def __init__(self, x: int, y: int, type: str, symbol: str):
+    def __init__(self, x: int, y: int, type: str, symbol: str, hidden: bool = False):
         self.x = x
         self.y = y
         self.type = type
         self.symbol = symbol
+        self.hidden = hidden
 
 class Event:
     def __init__(self, name: str, delay_seconds: float = 0, params = None):
@@ -108,6 +109,7 @@ def initial_render():
 
 LEVELS = [
     {
+        "Level": 1,
         "Spawn": GameObject(3, 3, "Spawn", '⭕'),
         "Flag": GameObject(3, 10, "Flag", '🚩'),
         "Objects": []
@@ -116,6 +118,11 @@ LEVELS = [
 
 def load_level(i):
     global level
+    global _quit
+    if(len(LEVELS) == i):
+        _quit = True
+        return
+    
     level = LEVELS[i]
     level["Player"] = GameObject(level["Spawn"].x, level["Spawn"].y, "Player", "🐛")
     level["Objects"].append(level["Spawn"])
@@ -137,22 +144,41 @@ def tick():
             continue
         
         if(e.name == "InitializeLevel"):
+            for i in range(LEVEL_HEIGHT):
+                stdscr.addstr(LEVEL_SCREEN_OFFSET_Y + i, LEVEL_SCREEN_OFFSET_X, " " * LEVEL_WIDTH * 2)
+
             stdscr.addch(LEVEL_SCREEN_OFFSET_Y + level["Player"].y, LEVEL_SCREEN_OFFSET_X + level["Player"].x * 2, level["Player"].symbol)
             stdscr.addch(LEVEL_SCREEN_OFFSET_Y + level["Flag"].y, LEVEL_SCREEN_OFFSET_X + level["Flag"].x * 2, level["Flag"].symbol)
         
         if(e.name == "Shoot"):
             ammo_left -= 1
             stdscr.addstr(5, 3, f"Ammo left: {ammo_left}")
+        
+        if(e.name == "ObtainedFlag"):
+            level["Flag"].hidden = True
+            stdscr.addstr(8, 3, "Bring the flag back to spawn!")
+        
+        if(e.name == "FlagCaptured"):
+            ammo_left = 4
+            load_level(level["Level"])
 
         if(e.name == "PlayerAttemptMove"):
             stdscr.addch(LEVEL_SCREEN_OFFSET_Y + level["Player"].y, LEVEL_SCREEN_OFFSET_X + level["Player"].x * 2, " ")
             for obj in level["Objects"]:
-                if(obj.x == level["Player"].x and obj.y == level["Player"].y and obj != level["Player"]):
+                if(obj.x == level["Player"].x and obj.y == level["Player"].y and obj != level["Player"] and not obj.hidden):
                     stdscr.addch(LEVEL_SCREEN_OFFSET_Y + level["Player"].y, LEVEL_SCREEN_OFFSET_X + level["Player"].x * 2, obj.symbol)
 
             level["Player"].x += e.params[0]
             level["Player"].y += e.params[1]
             stdscr.addch(LEVEL_SCREEN_OFFSET_Y + level["Player"].y, LEVEL_SCREEN_OFFSET_X + level["Player"].x * 2, level["Player"].symbol)
+
+            for obj in level["Objects"]:
+                if(obj.x == level["Player"].x and obj.y == level["Player"].y and obj != level["Player"]):
+                    if(obj.type == "Spawn" and level["Flag"].hidden):
+                        event_queue.put(Event("FlagCaptured"))
+
+                    if(obj.type == "Flag"):
+                        event_queue.put(Event("ObtainedFlag"))
     
     for e in repeat_events:
         event_queue.put(e)
@@ -192,5 +218,7 @@ def main(stdscr_in):
     return 0
 
 retcode = curses.wrapper(main)
+if retcode == 0:
+    print("You won!")
 if retcode == 1:
     print("The console window isn't big enough for the game! Please run the game in a bigger terminal window.")
