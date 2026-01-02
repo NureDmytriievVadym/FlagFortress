@@ -6,9 +6,8 @@
 import curses
 import time
 import queue
-from collections.abc import Callable
 import config
-from models import Vector2, GameObject, Event
+from models import Vector2, GameObject, Event, GameLevel
 
 _quit: bool = False
 gamestate: int = 1 # 0 = main menu, 1 = ingame, 2 = paused, 3 = over
@@ -19,7 +18,10 @@ level = {}
 last_move = Vector2(0, 0)
 event_queue = queue.SimpleQueue()
 
-def fire_event(e: Event):
+def fire_event(name: str, delay: float = 0, params: any = []):
+    event_queue.put(Event(name, delay, params))
+
+def refire_event(e: Event):
     event_queue.put(e)
 
 def handle_input():
@@ -36,37 +38,41 @@ def handle_input():
         return
     
     if(c == "KEY_LEFT"):
-        fire_event(Event("PlayerAttemptMove", 0, Vector2(0, -1)))
+        fire_event("PlayerAttemptMove", params = Vector2(0, -1))
         last_move = Vector2(0, -1)
     if(c == "KEY_RIGHT"):
-        fire_event(Event("PlayerAttemptMove", 0, Vector2(0, 1)))
+        fire_event("PlayerAttemptMove", params = Vector2(0, 1))
         last_move = Vector2(0, 1)
     if(c == "KEY_UP"):
-        fire_event(Event("PlayerAttemptMove", 0, Vector2(-1, 0)))
+        fire_event("PlayerAttemptMove", params = Vector2(-1, 0))
         last_move = Vector2(-1, 0)
     if(c == "KEY_DOWN"):
-        fire_event(Event("PlayerAttemptMove", 0, Vector2(1, 0)))
+        fire_event("PlayerAttemptMove", params = Vector2(1, 0))
         last_move = Vector2(1, 0)
     if(c.lower() == "c"):
-        fire_event(Event("PlayerAttemptMove", 0, last_move.mul(3)))
+        fire_event("PlayerAttemptMove", params = last_move.mul(3))
     if(c.lower() == "f"):
-        fire_event(Event("Shoot"))
+        fire_event("Shoot")
 
 LEVELS = [
-    {
-        "Level": 1,
-        "Ammo": 0,
-        "Spawn": GameObject(Vector2(3, 3), "Spawn", '⭕'),
-        "Flag": GameObject(Vector2(3, 10), "Flag", '🚩'),
-        "Objects": []
-    },
-    {
-        "Level": 2,
-        "Ammo": config.AMMO_PER_LEVEL,
-        "Spawn": GameObject(Vector2(3, 3), "Spawn", '⭕'),
-        "Flag": GameObject(Vector2(3, 10), "Flag", '🚩'),
-        "Objects": []
-    }
+    GameLevel(
+        num = 1,
+        name = "Flag",
+        starting_ammo = 0,
+        objects = [
+            GameObject(Vector2(3, 3), "Spawn", '⭕'),
+            GameObject(Vector2(3, 10), "Flag", '🚩'),
+        ]
+    ),
+    GameLevel(
+        num = 2,
+        name = "Walls",
+        starting_ammo = 0,
+        objects = [
+            GameObject(Vector2(3, 3), "Spawn", '⭕'),
+            GameObject(Vector2(3, 10), "Flag", '🚩'),
+        ]
+    )
 ]
 
 def load_level(i):
@@ -78,12 +84,10 @@ def load_level(i):
         return
     
     level = LEVELS[i]
-    level["Player"] = GameObject(level["Spawn"].pos.copy(), "Player", "🐛")
-    level["Objects"].append(level["Spawn"])
-    level["Objects"].append(level["Flag"])
-    level["Objects"].append(level["Player"])
-    ammo_left = LEVELS[i]["Ammo"]
-    fire_event(Event("InitializeLevel"))
+    level.player = GameObject(level.spawn.pos.copy(), "Player", "🐛")
+    level.objects.append(level.player)
+    ammo_left = level.starting_ammo
+    fire_event("InitializeLevel")
 
 def initial_render():
     global stdscr
@@ -104,7 +108,7 @@ def initial_render():
     stdscr.addstr(3, 3, "C - Dash")
     stdscr.addstr(4, 3, "F - Shoot")
     stdscr.addstr(5, 3, f"Ammo left: {ammo_left}")
-    stdscr.addstr(7, 3, "Level: 1")
+    stdscr.addstr(7, 3, f"Level: {level.name} (#{level.num})")
     stdscr.addstr(8, 3, "Get the flag!")
 
     stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y-1, config.LEVEL_SCREEN_OFFSET_X-1, '#' * (config.LEVEL_WIDTH * 2 + 4))
@@ -120,7 +124,7 @@ def render():
     for i in range(config.LEVEL_HEIGHT + 1):
         stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y + i, config.LEVEL_SCREEN_OFFSET_X, " " * (config.LEVEL_WIDTH * 2 + 1))
     
-    for obj in level["Objects"]:
+    for obj in level.objects:
         if(obj.hidden): continue
         stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y + obj.pos.y, config.LEVEL_SCREEN_OFFSET_X + obj.pos.x * 2, obj.symbol)
 
@@ -148,28 +152,28 @@ def tick():
             stdscr.addstr(5, 3, f"Ammo left: {ammo_left}")
         
         if(e.name == "ObtainedFlag"):
-            level["Flag"].hidden = True
+            level.flag.hidden = True
             stdscr.addstr(8, 3, "Bring the flag back to spawn!")
         
         if(e.name == "FlagCaptured"):
             ammo_left = 4
-            load_level(level["Level"])
+            load_level(level.num)
 
         if(e.name == "PlayerAttemptMove"):
-            if(level["Player"].pos.x + e.params.x > config.LEVEL_WIDTH or level["Player"].pos.x + e.params.x < 0): e.params.x = 0
-            if(level["Player"].pos.y + e.params.y > config.LEVEL_HEIGHT or level["Player"].pos.y + e.params.y < 0): e.params.y = 0
+            if(level.player.pos.x + e.params.x > config.LEVEL_WIDTH or level.player.pos.x + e.params.x < 0): e.params.x = 0
+            if(level.player.pos.y + e.params.y > config.LEVEL_HEIGHT or level.player.pos.y + e.params.y < 0): e.params.y = 0
 
-            level["Player"].pos = level["Player"].pos.add(e.params.y, e.params.x)
+            level.player.pos = level.player.pos.add(e.params.y, e.params.x)
 
-            for obj in level["Objects"]:
-                if(obj.pos.x == level["Player"].pos.x and obj.pos.y == level["Player"].pos.y and obj != level["Player"]):
-                    if(obj.type == "Spawn" and level["Flag"].hidden):
-                        fire_event(Event("FlagCaptured"))
+            for obj in level.objects:
+                if(obj.pos.x == level.player.pos.x and obj.pos.y == level.player.pos.y and obj != level.player):
+                    if(obj.type == "Spawn" and level.flag.hidden):
+                        fire_event("FlagCaptured")
 
                     if(obj.type == "Flag"):
-                        fire_event(Event("ObtainedFlag"))
+                        fire_event("ObtainedFlag")
     
-    for e in repeat_events: fire_event(e)
+    for e in repeat_events: refire_event(e)
 
 def main(stdscr_in):
     global stdscr
