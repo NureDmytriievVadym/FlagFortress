@@ -29,20 +29,58 @@ class Gamestate(Enum):
     OPTIONS = 4
     WINSCREEN = 5
 _gamestate: Gamestate = Gamestate.MAIN_MENU
+_options_saved_volume = config.VOLUME
 stdscr = None
 
 MENUS = {
     "MainMenu": Menu(Vector2(16, 48), "FlagFortress", "", [
-        ("play_builtin", "Start Game"),
-        ("play_custom", "Play Custom Levels"),
-        ("open_options", "Options"),
-        ("quit", "Quit")
+        ["play_builtin", "Start Game"],
+        ["play_custom", "Play Custom Levels"],
+        ["open_options", "Options"],
+        ["quit", "Quit"]
     ]),
     "Options": Menu(Vector2(16, 48), "Options", "Customize the game to your liking", [
-        ("play_builtin", "Start Game"),
-        ("play_custom", "Play Custom Levels"),
-        ("open_options", "Options"),
-        ("quit", "Quit")
+        ["options_set_target_tickrate", f"Target Tickrate ({config.TARGET_TICKRATE})"],
+        ["options_set_max_fps", f"Target FPS ({config.TARGET_FPS})"],
+        ["options_set_volume", f"Volume ({config.VOLUME})"],
+        ["options_set_show_fps", f"Display FPS ({config.DEBUG})"],
+        ["options_set_debug", f"Debug Mode ({config.DEBUG})"],
+        ["back", "Back"]
+    ]),
+    "Options_Target_Tickrate": Menu(Vector2(16, 48), "Target Tickrate", "Current value: ", [
+        ["options_set_target_tickrate_500", "500"],
+        ["options_set_target_tickrate_100", "100"],
+        ["options_set_target_tickrate_30", "30"],
+        ["options_set_target_tickrate_10", "10"],
+        ["back", "Back"]
+    ]),
+    "Options_Max_FPS": Menu(Vector2(16, 48), "Max FPS", "Current value: ", [
+        ["options_set_max_fps_1000", "1000"],
+        ["options_set_max_fps_250", "250"],
+        ["options_set_max_fps_144", "144"],
+        ["options_set_max_fps_100", "100"],
+        ["options_set_max_fps_60", "60"],
+        ["options_set_max_fps_30", "30"],
+        ["options_set_max_fps_10", "10"],
+        ["back", "Back"]
+    ]),
+    "Options_Volume": Menu(Vector2(16, 48), "Volume", "Current value: ", [
+        ["options_set_volume_100", "100"],
+        ["options_set_volume_90", "90"],
+        ["options_set_volume_80", "80"],
+        ["options_set_volume_70", "70"],
+        ["options_set_volume_60", "60"],
+        ["options_set_volume_50", "50"],
+        ["options_set_volume_40", "40"],
+        ["options_set_volume_30", "30"],
+        ["options_set_volume_20", "20"],
+        ["options_set_volume_10", "10"],
+        ["options_set_volume_0", "0"],
+        ["back", "Back"]
+    ]),
+    "Paused": Menu(Vector2(16, 48), "Paused", "", [
+        ["paused_unpause", "Back"],
+        ["paused_to_mainmenu", "To Main Menu"]
     ]),
 }
 
@@ -56,10 +94,8 @@ def load_colors():
     curses.init_pair(2, curses.COLOR_WHITE, curses.COLOR_BLACK)
     curses.init_pair(3, curses.COLOR_YELLOW, curses.COLOR_BLACK)
 
-def update_screen_size():
-    global _screensize
-    global stdscr
-    _screensize.y, _screensize.x = stdscr.getmaxyx()
+def get_screensize():
+    return stdscr.getmaxyx()
 
 def load_sound(snd: str):
     global _sound_cache
@@ -81,8 +117,13 @@ def load_sounds():
     load_sound("victory")
 
 def play_sound(snd: str):
-    _sound_cache[snd].set_volume(config.VOLUME)
+    _sound_cache[snd].set_volume(math.sqrt(config.VOLUME / 100.0))
     _sound_cache[snd].play()
+
+def save_settings():
+    with open("config.py", "w") as f:
+        for key, val in config.__dict__.items():
+            if key.isupper(): f.write(f"{key}={val}\n")
 
 def fire_event(name: str, delay: float = 0, params: any = []):
     global _lifetime
@@ -126,8 +167,10 @@ def handle_input():
             fire_event("PlayerDash", params = last_move.mul(3))
         elif(c.lower() == "f"):
             fire_event("Shoot")
-        elif(c.lower() == "k"):
+        elif(c.lower() == "k" and config.DEBUG):
             fire_event("PlayerHurt", params = 1)
+        elif(c.lower() == "p"):
+            fire_event("Pause")
     elif(_gamestate == Gamestate.MAIN_MENU or
          _gamestate == Gamestate.INGAME_PAUSED or
          _gamestate == Gamestate.OPTIONS):
@@ -135,6 +178,8 @@ def handle_input():
             fire_event("MoveMenuOption", params = -1)
         elif(c == "KEY_DOWN"):
             fire_event("MoveMenuOption", params = 1)
+        elif(c == "KEY_LEFT"):
+            fire_event("BackOption", params = -1)
         elif(c == "KEY_RIGHT"):
             fire_event("SelectMenuOption")
 
@@ -157,9 +202,8 @@ def render_fps():
     stdscr.addstr(2, _screensize.x - 16, f"FPS: {get_fps()}     ")
 
 def render_hud():
-    render_fps()
     if(level is None or level.player is None): return
-    stdscr.addstr(2, 3, "Arrow Keys - Move | C - Dash | F - Shoot | M - Main Menu | CTRL+C - Quit")
+    stdscr.addstr(2, 3, "Arrow Keys - Move | C - Dash | F - Shoot | P - Pause")
     stdscr.addstr(4, 3, f"HP: {level.player.health}")
     stdscr.addstr(5, 3, f"Ammo left: {level.player.ammo_left}")
     stdscr.addstr(7, 3, f"Level: {level.name} (#{level.num})")
@@ -211,6 +255,9 @@ def render_menu(menu: Menu, pos: Vector2):
     render_frame(Vector2(pos.y-math.floor(menu.size.y/2), pos.x-math.floor(menu.size.x/2)), menu.size, menu.frame_symbol, menu.frame_attr)
 
     stdscr.addstr(pos.y-math.floor(menu.size.y/2), pos.x-math.floor(len(menu.caption)/2), menu.caption)
+    description_lines = menu.description.split('\n')
+    for i in range(len(description_lines)):
+        stdscr.addstr(pos.y-math.floor(menu.size.y/2) + 2 + i, pos.x-math.floor(len(description_lines[i])/2), description_lines[i])
 
     for i in range(1, menu.size.y):
         stdscr.addstr(math.floor(pos.y - menu.size.y/2) + i, math.floor(pos.x - menu.size.x/2)+1, ' ' * (menu.size.x - 2))
@@ -267,6 +314,14 @@ def render_clear():
 
 def render():
     global _gamestate
+    global _screensize
+
+    new_screensize = Vector2(get_screensize()[0], get_screensize()[1])
+
+    if(new_screensize != _screensize): stdscr.clear()
+
+    _screensize = new_screensize
+
     if(_gamestate == Gamestate.INGAME_BUILTIN or
        _gamestate == Gamestate.INGAME_CUSTOM):
         render_ingame_matrix()
@@ -276,8 +331,12 @@ def render():
          _gamestate == Gamestate.OPTIONS or
          _gamestate == Gamestate.INGAME_PAUSED):
         render_current_menu()
+    
+    if(config.DISPLAY_FPS): render_fps()
 
 def on_collide(a: GameObject, b: GameObject):
+    if(_gamestate == Gamestate.INGAME_PAUSED): return False
+    
     if(a.type == "Player" and b.type == "Flag" and not b.hidden):
         fire_event("ObtainedFlag")
 
@@ -299,6 +358,8 @@ def on_collide(a: GameObject, b: GameObject):
     return a.type == "Player" and b.type == "Wall"
 
 def move_object(a: GameObject, move: Vector2):
+    if(_gamestate == Gamestate.INGAME_PAUSED): return
+
     move_x = 0
     move_y = 0
 
@@ -356,10 +417,61 @@ def change_gamestate(gamestate: Gamestate):
 
 def process_menu_action(action: str):
     global _quit
+    global _options_saved_volume
+    global menu
     if(action == "play_builtin"): change_gamestate(Gamestate.INGAME_BUILTIN)
-    if(action == "play_custom"): change_gamestate(Gamestate.INGAME_CUSTOM)
-    if(action == "open_otions"): change_gamestate(Gamestate.OPTIONS)
-    if(action == "quit"): _quit = True
+    elif(action == "play_custom"): change_gamestate(Gamestate.INGAME_CUSTOM)
+    elif(action == "open_options"):
+        change_gamestate(Gamestate.OPTIONS)
+        _options_saved_volume = config.VOLUME
+        menu = MENUS["Options"]
+    elif(action == "back"):
+        if(_gamestate == Gamestate.INGAME_PAUSED): fire_event("Unpause")
+        if(_gamestate == Gamestate.OPTIONS):
+            config.VOLUME = _options_saved_volume
+            if(menu == MENUS["Options"]):
+                change_gamestate(Gamestate.MAIN_MENU)
+                save_settings()
+            else: menu = MENUS["Options"]
+        else: _options_saved_volume = config.VOLUME
+    elif(action == "options_set_target_tickrate"):
+        menu = MENUS["Options_Target_Tickrate"]
+        menu.description = f"Current Value: {config.TARGET_TICKRATE}"
+        selected_option = [option for option in menu.options if option[1] != "Back" and int(option[0].split('_')[-1]) <= config.TARGET_TICKRATE][0]
+        menu.selected_option = menu.options.index(selected_option)
+    elif(action == "options_set_max_fps"):
+        menu = MENUS["Options_Max_FPS"]
+        menu.description = f"Current Value: {config.TARGET_FPS}"
+        selected_option = [option for option in menu.options if option[1] != "Back" and int(option[0].split('_')[-1]) <= config.TARGET_FPS][0]
+        menu.selected_option = menu.options.index(selected_option)
+    elif(action == "options_set_volume"):
+        _options_saved_volume = config.VOLUME
+        menu = MENUS["Options_Volume"]
+        menu.description = f"Current Value: {config.VOLUME}"
+        selected_option = [option for option in menu.options if option[1] != "Back" and int(option[0].split('_')[-1]) <= config.VOLUME][0]
+        menu.selected_option = menu.options.index(selected_option)
+    elif(action.startswith("options_set_target_tickrate_")):
+        config.TARGET_TICKRATE = int(action.split('_')[-1])
+        config.TARGET_TIME_PER_TICK = 1.0 / config.TARGET_TICKRATE
+        [option for option in MENUS["Options"].options if option[0] == "options_set_target_tickrate"][0][1] = f"Target Tickrate ({config.TARGET_TICKRATE})"
+        menu = MENUS["Options"]
+    elif(action.startswith("options_set_max_fps_")):
+        config.TARGET_FPS = int(action.split('_')[-1])
+        config.TARGET_FRAMETIME = 1.0 / config.TARGET_FPS
+        [option for option in MENUS["Options"].options if option[0] == "options_set_max_fps"][0][1] = f"Max FPS ({config.TARGET_FPS})"
+        menu = MENUS["Options"]
+    elif(action.startswith("options_set_volume_")):
+        config.VOLUME = int(action.split('_')[-1])
+        [option for option in MENUS["Options"].options if option[0] == "options_set_volume"][0][1] = f"Volume ({config.VOLUME})"
+        menu = MENUS["Options"]
+    elif(action == "options_set_debug"):
+        config.DEBUG = not config.DEBUG
+        [option for option in MENUS["Options"].options if option[0] == "options_set_debug"][0][1] = f"Debug Mode ({config.DEBUG})"
+    elif(action == "options_set_show_fps"):
+        config.DISPLAY_FPS = not config.DISPLAY_FPS
+        if not config.DISPLAY_FPS: stdscr.addstr(2, _screensize.x - 16, f"          ")
+        [option for option in MENUS["Options"].options if option[0] == "options_set_show_fps"][0][1] = f"Display FPS ({config.DISPLAY_FPS})"
+    elif(action == "quit"): _quit = True
 
 def tick():
     global stdscr
@@ -375,12 +487,17 @@ def tick():
             continue
         
         elif(e.name == "MoveMenuOption"):
-            play_sound("select")
             menu.selected_option = min(len(menu.options)-1, max(menu.selected_option + e.params, 0))
+            if(menu == MENUS["Options_Volume"]): config.VOLUME = max(0, min(10, 10 - menu.selected_option)) * 10
+            play_sound("select")
         
         elif(e.name == "SelectMenuOption"):
-            play_sound("select")
             process_menu_action(menu.options[menu.selected_option][0])
+            play_sound("select")
+        
+        elif(e.name == "BackOption"):
+            process_menu_action("back")
+            play_sound("select")
 
         elif(e.name == "InitializeLevel"):
             stdscr.clear()
@@ -455,16 +572,17 @@ def main(stdscr_in):
     global _quit
     global _lifetime
     global _frametime
+    global _screensize
     stdscr = stdscr_in
     stdscr.clear()
     stdscr.nodelay(True)
-    update_screen_size()
+    _screensize.y, _screensize.x = get_screensize()
 
-    if(_screensize.y < 30 or _screensize.x < 60):
+    if(_screensize.y < 20 or _screensize.x < 76):
         return 1
     
-    load_colors()
     pygame.mixer.init()
+    load_colors()
     load_sounds()
 
     lasttime = time.time_ns() / (10 ** 9)
@@ -480,15 +598,12 @@ def main(stdscr_in):
         lasttime = newtime
         handle_input()
 
-        update_screen_size()
-
         if(accumulator >= config.TARGET_TIME_PER_TICK * 10):
             accumulator = config.TARGET_TIME_PER_TICK
         while (accumulator >= config.TARGET_TIME_PER_TICK):
             tick()
             accumulator -= config.TARGET_TIME_PER_TICK
         render()
-        render_fps()
 
         if _quit:
             break
