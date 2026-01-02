@@ -14,10 +14,12 @@ import pygame
 from enum import Enum
 from levels_builtin import BUILTIN_LEVELS, BUILTIN_LEVELS_COUNT
 from models import *
+from enemy import *
 
 _sound_cache = {}
 _quit: bool = False
 _frametime: float = 1
+_deltatime: float = 1
 _lifetime: float = 0
 _registered_events = []
 _screensize: Vector2 = Vector2(10, 10)
@@ -28,6 +30,7 @@ class Gamestate(Enum):
     INGAME_PAUSED = 3
     OPTIONS = 4
     WINSCREEN = 5
+    LOSESCREEN = 6
 _gamestate: Gamestate = Gamestate.MAIN_MENU
 _options_saved_volume = config.VOLUME
 stdscr = None
@@ -79,8 +82,8 @@ MENUS = {
         ["back", "Back"]
     ]),
     "Paused": Menu(Vector2(16, 48), "Paused", "", [
-        ["paused_unpause", "Back"],
-        ["paused_to_mainmenu", "To Main Menu"]
+        ["back", "Back"],
+        ["to_mainmenu", "To Main Menu"]
     ]),
 }
 
@@ -186,7 +189,7 @@ def handle_input():
             fire_event("SelectMenuOption")
 
 def load_level_builtin(num: int):
-    load_level(BUILTIN_LEVELS[num])
+    load_level(BUILTIN_LEVELS[num-1])
 
 def load_level(lvl: GameLevel):
     global level
@@ -295,10 +298,12 @@ def render_ingame_seperate():
 def render_ingame_matrix():
     global stdscr
 
+    AIR = ' '
+
     render_matrix = []
     for i in range(config.LEVEL_HEIGHT+1):
         row = []
-        for i in range(config.LEVEL_WIDTH*2+2): row.append(' ')
+        for i in range(config.LEVEL_WIDTH*2+2): row.append(AIR)
         render_matrix.append(row)
     
     for obj in level.objects:
@@ -315,6 +320,8 @@ def render_ingame_matrix():
         if((not 0 <= obj.pos.y <= config.LEVEL_HEIGHT) or (not 0 <= obj.pos.x <= config.LEVEL_WIDTH)): continue
         render_matrix[obj.pos.y][obj.pos.x*2] = obj.symbol
         if(ord(obj.symbol) > 255): render_matrix[obj.pos.y][obj.pos.x*2+1] = ''
+        else:
+            if(render_matrix[obj.pos.y][obj.pos.x*2+1] == ''): render_matrix[obj.pos.y][obj.pos.x*2+1] = AIR
     
     for i in range(len(render_matrix)):
         row = render_matrix[i]
@@ -415,6 +422,7 @@ def change_gamestate(gamestate: Gamestate):
     global menu
     if(gamestate == Gamestate.MAIN_MENU):
         render_clear()
+        level = None
         menu = MENUS["MainMenu"]
     elif(gamestate == Gamestate.OPTIONS):
         menu = MENUS["Options"]
@@ -422,7 +430,13 @@ def change_gamestate(gamestate: Gamestate):
         menu = MENUS["Paused"]
     elif(gamestate == Gamestate.INGAME):
         menu = None
-        load_level_builtin(num=0)
+        render_clear()
+        render_level_frame()
+        render_window_frame()
+        render_hud()
+    elif(gamestate == Gamestate.INGAME_CUSTOM):
+        menu = None
+        render_clear()
         render_hud()
     
     _gamestate = gamestate
@@ -435,14 +449,18 @@ def on_level_complete():
         fire_event("Victory")
         return
             
-    load_level_builtin(level.num)
+    load_level_builtin(level.num+1)
 
 def process_menu_action(action: str):
     global _quit
     global _options_saved_volume
     global menu
-    if(action == "play_builtin"): change_gamestate(Gamestate.INGAME)
-    elif(action == "play_custom"): change_gamestate(Gamestate.INGAME_CUSTOM)
+    if(action == "play_builtin"):
+        change_gamestate(Gamestate.INGAME)
+        load_level_builtin(num=1)
+    elif(action == "play_custom"):
+        change_gamestate(Gamestate.INGAME_CUSTOM)
+        load_level_builtin(num=4)
     elif(action == "open_options"):
         change_gamestate(Gamestate.OPTIONS)
         _options_saved_volume = config.VOLUME
@@ -456,6 +474,8 @@ def process_menu_action(action: str):
                 save_settings()
             else: menu = MENUS["Options"]
         else: _options_saved_volume = config.VOLUME
+    elif(action == "to_mainmenu"):
+        change_gamestate(Gamestate.MAIN_MENU)
     elif(action == "options_set_target_tickrate"):
         menu = MENUS["Options_Target_Tickrate"]
         menu.description = f"Current Value: {config.TARGET_TICKRATE}"
@@ -501,6 +521,19 @@ def tick():
     global menu
     global saved_gamestate
     global saved_events
+    global _deltatime
+
+    if(_gamestate in (Gamestate.INGAME, Gamestate.INGAME_CUSTOM)):
+        if(level.player.dash_cooldown > 0):
+            level.player.dash_cooldown = max(0, level.player.dash_cooldown - _deltatime)
+
+        for enemy in [enemy for enemy in level.objects if issubclass(type(enemy), Enemy) and not enemy.ai_disabled]:
+            decision = enemy.think(level, _deltatime)
+            if decision is None: continue
+            if(decision.action == "Move"):
+                fire_event("EnemyMove", params=(enemy, decision.move))
+            elif(decision.action == "TacklePlayer"):
+                fire_event("EnemyTacklePlayer", params=enemy)  
 
     repeat_events = []
     while(not event_queue.empty()):
@@ -538,7 +571,7 @@ def tick():
             bullet = PlayerBullet(level.player.pos.copy(), last_move.normal())
             level.add_object(bullet)
             fire_event("BulletMove", 0, bullet)
-        
+
         elif(e.name == "BulletMove"):
             bullet = e.params
             if(bullet == None or bullet.deleted): continue
@@ -562,7 +595,7 @@ def tick():
                 event_queue.put(saved_events[-1])
                 saved_events.remove(saved_events[-1])
 
-            change_gamestate(Gamestate.IN)
+            change_gamestate(saved_gamestate)
 
         elif(e.name == "ToMainMenu"):
             change_gamestate(Gamestate.MAIN_MENU)
@@ -579,6 +612,7 @@ def tick():
         elif(e.name == "PlayerDash"):
             if (not level.player.has_dash) or level.player.dash_speed == 0: return
             play_sound('dash')
+            level.player.dash_cooldown = 1
             level.player.invulnerable = True
             fire_event("PlayerMove", params = last_move.mul(level.player.dash_speed))
             level.player.invulnerable = False
@@ -587,15 +621,25 @@ def tick():
             move_object(level.player, e.params)
         
         elif(e.name == "PlayerHurt"):
-            if(level.player.invulnerable): return
+            dmg = e.params
+            if(dmg <= 0): continue
             play_sound('hurt')
-            level.player.health -= e.params
+            level.player.health -= dmg
             render_level_frame('@', curses.color_pair(1))
             fire_event("PlayerHurtFlashOver", delay = 0.2)
             # todo
         
         elif(e.name == "PlayerHurtFlashOver"):
             render_level_frame('#')
+        
+        elif(e.name == "EnemyMove"):
+            enemy, move = e.params
+            move_object(enemy, move)
+        
+        elif(e.name == "EnemyTacklePlayer"):
+            enemy = e.params
+            if(level.player.invulnerable): return
+            fire_event("PlayerHurt", params=max(0, enemy.strength - level.player.defense))
     
     for e in repeat_events: refire_event(e)
 
@@ -605,6 +649,7 @@ def main(stdscr_in):
     global _lifetime
     global _frametime
     global _screensize
+    global _deltatime
     stdscr = stdscr_in
     stdscr.clear()
     stdscr.nodelay(True)
@@ -617,28 +662,32 @@ def main(stdscr_in):
     load_colors()
     load_sounds()
 
-    lasttime = time.time_ns() / (10 ** 9)
+    last_time = time.time_ns() / (10 ** 9)
+    last_tick_time = time.time_ns() / (10 ** 9)
     accumulator = 0
 
     change_gamestate(Gamestate.MAIN_MENU)
     while True:
         newtime = time.time_ns() / (10 ** 9)
-        deltatime = newtime - lasttime
-        _frametime = deltatime
-        _lifetime += deltatime
-        accumulator += deltatime
-        lasttime = newtime
+        _frametime = newtime - last_time
+        _lifetime += _frametime
+        accumulator += _frametime
+        last_time = newtime
         handle_input()
 
         if(accumulator >= config.TARGET_TIME_PER_TICK * 10):
             accumulator = config.TARGET_TIME_PER_TICK
+        
         while (accumulator >= config.TARGET_TIME_PER_TICK):
+            _deltatime = time.time_ns() / (10 ** 9) - last_tick_time
             tick()
+            last_tick_time = time.time_ns() / (10 ** 9)
             accumulator -= config.TARGET_TIME_PER_TICK
         render()
 
-        if _quit:
-            break
+        if(_screensize.y < 20 or _screensize.x < 76): return 1
+
+        if _quit: break
 
         if(_frametime < config.TARGET_FRAMETIME): time.sleep(config.TARGET_FRAMETIME)
     

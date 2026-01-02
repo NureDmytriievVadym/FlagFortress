@@ -61,8 +61,10 @@ class Player(GameObject):
     def __init__(self, pos: Vector2, symbol: str = "🐛"):
         GameObject.__init__(self, pos, symbol)
         self.health = 3
+        self.defense = 0
         self.has_dash = True
         self.dash_speed = 3
+        self.dash_cooldown = 0
         self.invulnerable = False
         self.ammo_left = 0
         self.order = 100

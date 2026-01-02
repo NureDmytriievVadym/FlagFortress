@@ -1,0 +1,111 @@
+import heapq, itertools, random
+from models import *
+
+class EnemyAction:
+    def __init__(self, action: str, move: Vector2 = Vector2(0, 0)):
+        self.action = action
+        self.move = move
+
+class Enemy(GameObject):
+    def __init__(self, pos: Vector2, symbol: str = "🤖"):
+        GameObject.__init__(self, pos, symbol)
+        self.health = 1
+        self.speed = 1
+        self.speed_random_deviation = 0.25
+        self.invulnerable = False
+        self.ai_disabled = False
+        self.think_cooldown = 0
+    
+    @property
+    def type(self): return "Enemy"
+
+    def think(self, level: GameLevel, deltatime: float) -> EnemyAction:
+        self.think_cooldown -= deltatime
+        if(self.think_cooldown <= 0):
+            self.think_cooldown = 1.0 / self.speed + (random.random() - 0.5) * 2 * self.speed_random_deviation
+        return None
+
+# Vibe coded. Don't have enough time to implement and debug an A* algorithm, unfortunately
+_counter = itertools.count()
+
+def manhattan_distance(a: Vector2, b: Vector2) -> int:
+    return abs(a.y - b.y) + abs(a.x - b.x)
+
+def is_walkable(pos: Vector2, objects: list[GameObject]) -> bool:
+    for o in objects:
+        if o.deleted:
+            continue
+        if o.pos == pos and (issubclass(type(o), Wall) or
+                             issubclass(type(o), Hazard) or
+                             issubclass(type(o), Enemy)):
+            return False
+    return True
+
+def astar_next_move(start: Vector2, goal: Vector2, level: GameLevel):
+    open_set = []
+    heapq.heappush(open_set, (0, next(_counter), start))
+
+    came_from = {}
+    g_score = { (start.y, start.x): 0 }
+
+    directions = [
+        Vector2(-1, 0),
+        Vector2(1, 0),
+        Vector2(0, -1),
+        Vector2(0, 1),
+    ]
+
+    while open_set:
+        _, _, current = heapq.heappop(open_set)
+
+        if current == goal:
+            key = (current.y, current.x)
+            prev = came_from.get(key)
+            if prev is None:
+                return None
+            while prev != start:
+                current = prev
+                prev = came_from.get((current.y, current.x))
+                if prev is None:
+                    return None
+            return current
+
+        for d in directions:
+            neighbor = current.add(d.y, d.x)
+
+            if not is_walkable(neighbor, level.objects):
+                continue
+
+            key = (neighbor.y, neighbor.x)
+            tentative_g = g_score[(current.y, current.x)] + 1
+
+            if key not in g_score or tentative_g < g_score[key]:
+                came_from[key] = current
+                g_score[key] = tentative_g
+                f = tentative_g + manhattan_distance(neighbor, goal)
+                heapq.heappush(open_set, (f, next(_counter), neighbor))
+
+    return None  # no path
+
+class Ghost(Enemy):
+    def __init__(self, pos: Vector2, symbol: str = "👻"):
+        Enemy.__init__(self, pos, symbol)
+        self.strength = 1
+    
+    @property
+    def type(self): return "Ghost"
+
+    def think(self, level: GameLevel, deltatime: float) -> EnemyAction:
+        self.think_cooldown -= deltatime
+
+        if(self.think_cooldown > 0): return None
+        
+        self.think_cooldown = 1.0 / self.speed + (random.random() - 0.5) * 2 * self.speed_random_deviation
+
+        if(manhattan_distance(self.pos, level.player.pos) <= 1):
+            self.think_cooldown = 2
+            return EnemyAction("TacklePlayer")
+
+        move = astar_next_move(self.pos, level.player.pos, level)
+        if not move is None: return EnemyAction("Move", Vector2(move.y - self.pos.y, move.x - self.pos.x))
+        else: return EnemyAction("Idle", Vector2(0, 0))

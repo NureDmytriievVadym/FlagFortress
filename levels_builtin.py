@@ -1,4 +1,5 @@
 from models import *
+from enemy import *
 
 BUILTIN_LEVELS = [
     GameLevel(
@@ -50,6 +51,43 @@ BUILTIN_LEVELS = [
             Wall(Vector2(4, 12), symbol = '◾', breakable = True),
             Wall(Vector2(5, 12), symbol = '◾', breakable = True),
             Wall(Vector2(6, 12), symbol = '◾', breakable = True),
+        ]
+    ),
+    GameLevel(
+        num = 4,
+        name = "A Ghost!",
+        starting_ammo = 3,
+        objects = [
+            Spawn(Vector2(5, 5)),
+            Flag(Vector2(5, 18)),
+            Ghost(Vector2(5, 14)),
+            Wall(Vector2(3, 12)),
+            Wall(Vector2(3, 13)),
+            Wall(Vector2(3, 14)),
+            Wall(Vector2(3, 15)),
+            Wall(Vector2(3, 16)),
+            Wall(Vector2(3, 17)),
+            Wall(Vector2(3, 18)),
+            Wall(Vector2(3, 19)),
+            Wall(Vector2(3, 20)),
+            Wall(Vector2(7, 12)),
+            Wall(Vector2(7, 13)),
+            Wall(Vector2(7, 14)),
+            Wall(Vector2(7, 15)),
+            Wall(Vector2(7, 16)),
+            Wall(Vector2(7, 17)),
+            Wall(Vector2(7, 18)),
+            Wall(Vector2(7, 19)),
+            Wall(Vector2(7, 20)),
+            Wall(Vector2(4, 20)),
+            Wall(Vector2(5, 20)),
+            Wall(Vector2(6, 20)),
+            Wall(Vector2(4, 12), symbol = '◾', breakable = True),
+            Wall(Vector2(5, 12), symbol = '◾', breakable = True),
+            Wall(Vector2(6, 12), symbol = '◾', breakable = True),
+            Wall(Vector2(4, 16), symbol = '◾', breakable = True),
+            Wall(Vector2(5, 16), symbol = '◾', breakable = True),
+            Wall(Vector2(6, 16), symbol = '◾', breakable = True),
         ]
     )
 ]
