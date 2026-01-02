@@ -37,7 +37,13 @@ MENUS = {
         ("play_custom", "Play Custom Levels"),
         ("open_options", "Options"),
         ("quit", "Quit")
-    ])
+    ]),
+    "Options": Menu(Vector2(16, 48), "Options", "Customize the game to your liking", [
+        ("play_builtin", "Start Game"),
+        ("play_custom", "Play Custom Levels"),
+        ("open_options", "Options"),
+        ("quit", "Quit")
+    ]),
 }
 
 menu: Menu = None
@@ -75,6 +81,7 @@ def load_sounds():
     load_sound("victory")
 
 def play_sound(snd: str):
+    _sound_cache[snd].set_volume(config.VOLUME)
     _sound_cache[snd].play()
 
 def fire_event(name: str, delay: float = 0, params: any = []):
@@ -99,36 +106,43 @@ def handle_input():
     if(c == -1 or c == ""):
         return
     
-    if(_gamestate == Gamestate.INGAME_BUILTIN or _gamestate == Gamestate.INGAME_CUSTOM):
+    if(_gamestate == Gamestate.INGAME_BUILTIN or
+       _gamestate == Gamestate.INGAME_CUSTOM):
         if(c == "KEY_LEFT"):
             fire_event("PlayerMove", params = Vector2(0, -1))
             last_move = Vector2(0, -1)
-        if(c == "KEY_RIGHT"):
+        elif(c == "KEY_RIGHT"):
             fire_event("PlayerMove", params = Vector2(0, 1))
             last_move = Vector2(0, 1)
-        if(c == "KEY_UP"):
+        elif(c == "KEY_UP"):
             fire_event("PlayerMove", params = Vector2(-1, 0))
             last_move = Vector2(-1, 0)
-        if(c == "KEY_DOWN"):
+        elif(c == "KEY_DOWN"):
             fire_event("PlayerMove", params = Vector2(1, 0))
             last_move = Vector2(1, 0)
-        if(c.lower() == "m"):
+        elif(c.lower() == "m"):
             fire_event("ToMainMenu")
-        if(c.lower() == "c"):
+        elif(c.lower() == "c"):
             fire_event("PlayerDash", params = last_move.mul(3))
-        if(c.lower() == "f"):
+        elif(c.lower() == "f"):
             fire_event("Shoot")
-        if(c.lower() == "k"):
+        elif(c.lower() == "k"):
             fire_event("PlayerHurt", params = 1)
+    elif(_gamestate == Gamestate.MAIN_MENU or
+         _gamestate == Gamestate.INGAME_PAUSED or
+         _gamestate == Gamestate.OPTIONS):
+        if(c == "KEY_UP"):
+            fire_event("MoveMenuOption", params = -1)
+        elif(c == "KEY_DOWN"):
+            fire_event("MoveMenuOption", params = 1)
+        elif(c == "KEY_RIGHT"):
+            fire_event("SelectMenuOption")
 
 def load_level_builtin(num: int):
     load_level(BUILTIN_LEVELS[num])
 
-def load_level(lvl: GameLevel, custom: bool = False):
+def load_level(lvl: GameLevel):
     global level
-
-    change_gamestate(Gamestate.INGAME_BUILTIN if not custom else Gamestate.INGAME_CUSTOM)
-
     level = lvl
     level.player = Player(level.spawn.pos.copy())
     level.add_object(level.player)
@@ -143,12 +157,13 @@ def render_fps():
     stdscr.addstr(2, _screensize.x - 16, f"FPS: {get_fps()}     ")
 
 def render_hud():
+    render_fps()
+    if(level is None or level.player is None): return
     stdscr.addstr(2, 3, "Arrow Keys - Move | C - Dash | F - Shoot | M - Main Menu | CTRL+C - Quit")
-    stdscr.addstr(4, 3, f"HP: {0 if level.player is None else level.player.health}")
-    stdscr.addstr(5, 3, f"Ammo left: {0 if level.player is None else level.player.ammo_left}")
+    stdscr.addstr(4, 3, f"HP: {level.player.health}")
+    stdscr.addstr(5, 3, f"Ammo left: {level.player.ammo_left}")
     stdscr.addstr(7, 3, f"Level: {level.name} (#{level.num})")
     stdscr.addstr(8, 3, "Get the flag and bring it back to spawn")
-    render_fps()
 
 def render_debug():
     global _registered_events
@@ -190,25 +205,29 @@ def initial_ingame_render():
     render_hud()
     render_level_frame()
 
-def render_current_menu():
-    global menu
+def render_menu(menu: Menu, pos: Vector2):
     global _screensize
-    render_frame(Vector2(math.floor(_screensize.y/2 - menu.size.y/2)-1, math.floor(_screensize.x/2 - menu.size.x/2)-1), menu.size.add(2, 2), ' ', curses.COLOR_BLACK)
-    render_frame(Vector2(math.floor(_screensize.y/2 - menu.size.y/2), math.floor(_screensize.x/2 - menu.size.x/2)), menu.size, menu.frame_symbol, menu.frame_attr)
+    render_frame(Vector2(pos.y-math.floor(menu.size.y/2)-1, pos.x-math.floor(menu.size.x/2)-1), menu.size.add(2, 2), ' ', curses.COLOR_BLACK)
+    render_frame(Vector2(pos.y-math.floor(menu.size.y/2), pos.x-math.floor(menu.size.x/2)), menu.size, menu.frame_symbol, menu.frame_attr)
 
-    stdscr.addstr(math.floor(_screensize.y/2 - menu.size.y/2), math.floor(_screensize.x/2 - len(menu.caption)/2), menu.caption)
+    stdscr.addstr(pos.y-math.floor(menu.size.y/2), pos.x-math.floor(len(menu.caption)/2), menu.caption)
 
     for i in range(1, menu.size.y):
-        stdscr.addstr(math.floor(_screensize.y/2 - menu.size.y/2) + i, math.floor(_screensize.x/2 - menu.size.x/2)+1, ' ' * (menu.size.x - 2))
+        stdscr.addstr(math.floor(pos.y - menu.size.y/2) + i, math.floor(pos.x - menu.size.x/2)+1, ' ' * (menu.size.x - 2))
     
     max_option_len = len(menu.options[0][1]) if len(menu.options[0]) > 0 else 0
     option_count = len(menu.options)
     for i in range(len(menu.options)):
         option = menu.options[i]
-        stdscr.addstr(math.floor(_screensize.y/2 - math.floor(option_count/2)) + i, math.floor(_screensize.x/2 - len(option[1])/2)+1, option[1])
+        stdscr.addstr(math.floor(pos.y - math.floor(option_count/2)) + i, math.floor(pos.x - len(option[1])/2)+1, option[1])
         max_option_len = max(max_option_len, len(option[1]))
     
-    stdscr.addch(math.floor(_screensize.y/2 - math.floor(option_count/2)) + menu.selected_option, math.floor(_screensize.x/2 - max_option_len/2)-2, '>')
+    stdscr.addch(math.floor(pos.y - math.floor(option_count/2)) + menu.selected_option, math.floor(pos.x - max_option_len/2)-2, '>')
+
+def render_current_menu():
+    global menu
+    render_menu(menu, Vector2(_screensize.y / 2, _screensize.x / 2))
+    
 
 def render_ingame_seperate():
     global stdscr
@@ -241,6 +260,10 @@ def render_ingame_matrix():
     for i in range(len(render_matrix)):
         row = render_matrix[i]
         stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y + i, config.LEVEL_SCREEN_OFFSET_X, ''.join(row))
+
+def render_clear():
+    global stdscr
+    stdscr.clear()
 
 def render():
     global _gamestate
@@ -317,16 +340,31 @@ def move_object(a: GameObject, move: Vector2):
 def change_gamestate(gamestate: Gamestate):
     global _gamestate
     global menu
-    if(gamestate == Gamestate.MAIN_MENU): menu = MENUS["MainMenu"]
-    elif(gamestate == Gamestate.OPTIONS): menu = MENUS["Options"]
-    elif(gamestate == Gamestate.INGAME_PAUSED): menu = MENUS["Paused"]
-    else: menu = None
-        
+    if(gamestate == Gamestate.MAIN_MENU):
+        render_clear()
+        menu = MENUS["MainMenu"]
+    elif(gamestate == Gamestate.OPTIONS):
+        menu = MENUS["Options"]
+    elif(gamestate == Gamestate.INGAME_PAUSED):
+        menu = MENUS["Paused"]
+    elif(gamestate == Gamestate.INGAME_BUILTIN):
+        menu = None
+        load_level_builtin(num=0)
+        render_hud()
+    
     _gamestate = gamestate
+
+def process_menu_action(action: str):
+    global _quit
+    if(action == "play_builtin"): change_gamestate(Gamestate.INGAME_BUILTIN)
+    if(action == "play_custom"): change_gamestate(Gamestate.INGAME_CUSTOM)
+    if(action == "open_otions"): change_gamestate(Gamestate.OPTIONS)
+    if(action == "quit"): _quit = True
 
 def tick():
     global stdscr
     global event_queue
+    global menu
 
     repeat_events = []
     while(not event_queue.empty()):
@@ -336,6 +374,14 @@ def tick():
             e.delay -= 1
             continue
         
+        elif(e.name == "MoveMenuOption"):
+            play_sound("select")
+            menu.selected_option = min(len(menu.options)-1, max(menu.selected_option + e.params, 0))
+        
+        elif(e.name == "SelectMenuOption"):
+            play_sound("select")
+            process_menu_action(menu.options[menu.selected_option][0])
+
         elif(e.name == "InitializeLevel"):
             stdscr.clear()
             initial_ingame_render()
@@ -424,8 +470,7 @@ def main(stdscr_in):
     lasttime = time.time_ns() / (10 ** 9)
     accumulator = 0
 
-    _gamestate = Gamestate.INGAME_BUILTIN
-    load_level_builtin(0)
+    change_gamestate(Gamestate.MAIN_MENU)
     while True:
         newtime = time.time_ns() / (10 ** 9)
         deltatime = newtime - lasttime
