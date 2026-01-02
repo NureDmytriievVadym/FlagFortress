@@ -136,3 +136,12 @@ class GameLevel:
         
         o.deleted = True
     
+class Menu:
+    def __init__(self, size: Vector2, caption: str, description: str, options: list[(str, str)]):
+        self.size = size
+        self.caption = caption
+        self.description = description
+        self.options = options
+        self.selected_option = 0
+        self.frame_symbol = '#'
+        self.frame_attr = 0

@@ -8,21 +8,74 @@
 import curses
 import time
 import queue
+import math
 import config
 import pygame
-from models import sign, Vector2, GameObject, Player, Wall, Spawn, Flag, PlayerBullet, Event, GameLevel
+from enum import Enum
+from levels_builtin import BUILTIN_LEVELS, BUILTIN_LEVELS_COUNT
+from models import sign, Vector2, GameObject, Player, Wall, Spawn, Flag, PlayerBullet, Event, GameLevel, Menu
 
 _sound_cache = {}
 _quit: bool = False
 _frametime: float = 1
 _lifetime: float = 0
 _registered_events = []
-gamestate: int = 1 # 0 = main menu, 1 = ingame, 2 = paused, 3 = over
+_screensize: Vector2 = Vector2(10, 10)
+class Gamestate(Enum):
+    MAIN_MENU = 0
+    INGAME_BUILTIN = 1
+    INGAME_CUSTOM = 2
+    INGAME_PAUSED = 3
+    OPTIONS = 4
+    WINSCREEN = 5
+_gamestate: Gamestate = Gamestate.MAIN_MENU
 stdscr = None
 
-level = {}
+MENUS = {
+    "MainMenu": Menu(Vector2(16, 48), "FlagFortress", "", [
+        ("play_builtin", "Start Game"),
+        ("play_custom", "Play Custom Levels"),
+        ("open_options", "Options"),
+        ("quit", "Quit")
+    ])
+}
+
+menu: Menu = None
+level: GameLevel = None
 last_move = Vector2(0, 0)
 event_queue = queue.SimpleQueue()
+
+def load_colors():
+    curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_RED)
+    curses.init_pair(2, curses.COLOR_WHITE, curses.COLOR_BLACK)
+    curses.init_pair(3, curses.COLOR_YELLOW, curses.COLOR_BLACK)
+
+def update_screen_size():
+    global _screensize
+    global stdscr
+    _screensize.y, _screensize.x = stdscr.getmaxyx()
+
+def load_sound(snd: str):
+    global _sound_cache
+    _sound_cache[snd] = pygame.mixer.Sound(f"snd/{snd}.wav")
+
+def load_sounds():
+    load_sound("dash")
+    load_sound("death")
+    load_sound("explosion")
+    load_sound("hurt")
+    load_sound("level_complete")
+    load_sound("pickup")
+    load_sound("rg_reloaded")
+    load_sound("rg_shoot_a")
+    load_sound("rg_shoot_b")
+    load_sound("rl_shoot")
+    load_sound("select")
+    load_sound("shoot")
+    load_sound("victory")
+
+def play_sound(snd: str):
+    _sound_cache[snd].play()
 
 def fire_event(name: str, delay: float = 0, params: any = []):
     global _lifetime
@@ -46,109 +99,37 @@ def handle_input():
     if(c == -1 or c == ""):
         return
     
-    if(c == "KEY_LEFT"):
-        fire_event("PlayerMove", params = Vector2(0, -1))
-        last_move = Vector2(0, -1)
-    if(c == "KEY_RIGHT"):
-        fire_event("PlayerMove", params = Vector2(0, 1))
-        last_move = Vector2(0, 1)
-    if(c == "KEY_UP"):
-        fire_event("PlayerMove", params = Vector2(-1, 0))
-        last_move = Vector2(-1, 0)
-    if(c == "KEY_DOWN"):
-        fire_event("PlayerMove", params = Vector2(1, 0))
-        last_move = Vector2(1, 0)
-    if(c.lower() == "m"):
-        fire_event("ToMainMenu")
-    if(c.lower() == "c"):
-        fire_event("PlayerDash", params = last_move.mul(3))
-    if(c.lower() == "f"):
-        fire_event("Shoot")
-    if(c.lower() == "k"):
-        fire_event("PlayerHurt", params = 1)
+    if(_gamestate == Gamestate.INGAME_BUILTIN or _gamestate == Gamestate.INGAME_CUSTOM):
+        if(c == "KEY_LEFT"):
+            fire_event("PlayerMove", params = Vector2(0, -1))
+            last_move = Vector2(0, -1)
+        if(c == "KEY_RIGHT"):
+            fire_event("PlayerMove", params = Vector2(0, 1))
+            last_move = Vector2(0, 1)
+        if(c == "KEY_UP"):
+            fire_event("PlayerMove", params = Vector2(-1, 0))
+            last_move = Vector2(-1, 0)
+        if(c == "KEY_DOWN"):
+            fire_event("PlayerMove", params = Vector2(1, 0))
+            last_move = Vector2(1, 0)
+        if(c.lower() == "m"):
+            fire_event("ToMainMenu")
+        if(c.lower() == "c"):
+            fire_event("PlayerDash", params = last_move.mul(3))
+        if(c.lower() == "f"):
+            fire_event("Shoot")
+        if(c.lower() == "k"):
+            fire_event("PlayerHurt", params = 1)
 
-LEVELS = [
-    GameLevel(
-        num = 1,
-        name = "Flag",
-        starting_ammo = 3,
-        objects = [
-            Spawn(Vector2(5, 5)),
-            Flag(Vector2(5, 14)),
-        ]
-    ),
-    GameLevel(
-        num = 2,
-        name = "Walls",
-        starting_ammo = 2,
-        objects = [
-            Spawn(Vector2(5, 5)),
-            Flag(Vector2(5, 14)),
-            Wall(Vector2(2, 10)),
-            Wall(Vector2(3, 10)),
-            Wall(Vector2(4, 10)),
-            Wall(Vector2(5, 10)),
-            Wall(Vector2(6, 10)),
-            Wall(Vector2(7, 10)),
-            Wall(Vector2(8, 10)),
-        ]
-    ),
-    GameLevel(
-        num = 3,
-        name = "Breakable walls",
-        starting_ammo = 3,
-        objects = [
-            Spawn(Vector2(5, 5)),
-            Flag(Vector2(5, 14)),
-            Wall(Vector2(3, 12)),
-            Wall(Vector2(3, 13)),
-            Wall(Vector2(3, 14)),
-            Wall(Vector2(3, 15)),
-            Wall(Vector2(3, 16)),
-            Wall(Vector2(7, 12)),
-            Wall(Vector2(7, 13)),
-            Wall(Vector2(7, 14)),
-            Wall(Vector2(7, 15)),
-            Wall(Vector2(7, 16)),
-            Wall(Vector2(4, 16)),
-            Wall(Vector2(5, 16)),
-            Wall(Vector2(6, 16)),
-            Wall(Vector2(4, 12), symbol = '◾', breakable = True),
-            Wall(Vector2(5, 12), symbol = '◾', breakable = True),
-            Wall(Vector2(6, 12), symbol = '◾', breakable = True),
-        ]
-    )
-]
+def load_level_builtin(num: int):
+    load_level(BUILTIN_LEVELS[num])
 
-def load_sound(snd: str):
-    global _sound_cache
-    _sound_cache[snd] = pygame.mixer.Sound(f"snd/{snd}.wav")
-
-def load_sounds():
-    load_sound("dash")
-    load_sound("death")
-    load_sound("explosion")
-    load_sound("hurt")
-    load_sound("level_complete")
-    load_sound("pickup")
-    load_sound("rg_reloaded")
-    load_sound("rg_shoot_a")
-    load_sound("rg_shoot_b")
-    load_sound("rl_shoot")
-    load_sound("select")
-    load_sound("shoot")
-
-def play_sound(snd: str):
-    _sound_cache[snd].play()
-
-def load_level(i):
+def load_level(lvl: GameLevel, custom: bool = False):
     global level
-    global _quit
-    if(len(LEVELS) == i):
-        _quit = True
-        return
-    
-    level = LEVELS[i]
+
+    change_gamestate(Gamestate.INGAME_BUILTIN if not custom else Gamestate.INGAME_CUSTOM)
+
+    level = lvl
     level.player = Player(level.spawn.pos.copy())
     level.add_object(level.player)
     level.player.ammo_left = level.starting_ammo
@@ -158,11 +139,11 @@ def get_fps():
     return round(1.0 / _frametime)
 
 def render_fps():
-    maxy, maxx = stdscr.getmaxyx()
-    stdscr.addstr(2, maxx - 16, f"FPS: {get_fps()}     ")
+    global _screensize
+    stdscr.addstr(2, _screensize.x - 16, f"FPS: {get_fps()}     ")
 
 def render_hud():
-    stdscr.addstr(2, 3, "Arrow Keys - Move | C - Dash | F - Shoot | M - Main Menu")
+    stdscr.addstr(2, 3, "Arrow Keys - Move | C - Dash | F - Shoot | M - Main Menu | CTRL+C - Quit")
     stdscr.addstr(4, 3, f"HP: {0 if level.player is None else level.player.health}")
     stdscr.addstr(5, 3, f"Ammo left: {0 if level.player is None else level.player.ammo_left}")
     stdscr.addstr(7, 3, f"Level: {level.name} (#{level.num})")
@@ -171,8 +152,9 @@ def render_hud():
 
 def render_debug():
     global _registered_events
+    global _screensize
 
-    for i in range(stdscr.getmaxyx()[0] - (config.LEVEL_SCREEN_OFFSET_Y + config.LEVEL_HEIGHT + 4)):
+    for i in range(_screensize.y - (config.LEVEL_SCREEN_OFFSET_Y + config.LEVEL_HEIGHT + 4)):
         stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y + config.LEVEL_HEIGHT + 3 + i, 3, " " * 60)
 
     stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y + config.LEVEL_HEIGHT + 2, 3, "GameObjects")
@@ -185,37 +167,50 @@ def render_debug():
         e = _registered_events[i]
         stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y + config.LEVEL_HEIGHT + 3 + i, 40, f"{'%.1f' % e[1]}: {e[0].name}")
 
+def render_frame(pos: Vector2, size: Vector2, symbol: str = '#', symbol_attr: int = 0):
+    stdscr.addstr(pos.y, pos.x, symbol * size.x, symbol_attr)
+    stdscr.addstr(pos.y + size.y, pos.x, symbol * size.x, symbol_attr)
+    for i in range(size.y+1):
+        stdscr.addch(pos.y + i, pos.x, symbol, symbol_attr)
+        stdscr.addch(pos.y + i, pos.x + size.x, symbol, symbol_attr)
+
 def render_window_frame(symbol: str = '.'):
-    global stdscr
-    screen_height, screen_width = stdscr.getmaxyx()
+    global _screensize
 
-    for i in range(0, screen_width-1):
-        stdscr.addch(0, i, '.')
-    
-    for i in range(0, screen_height-1):
-        stdscr.addch(i, 0, '.')
+    try:
+        render_frame(Vector2(0, 0), Vector2(_screensize.y-1, _screensize.x-1), '.')
+    except:
+        pass
 
-    for i in range(0, screen_width-1):
-        stdscr.addch(screen_height-1, i, '.')
-    
-    for i in range(0, screen_height-1):
-        stdscr.addch(i, screen_width-1, '.')
+def render_level_frame(symbol: str = '#', symbol_attr: int = 0):
+    render_frame(Vector2(config.LEVEL_SCREEN_OFFSET_Y-1, config.LEVEL_SCREEN_OFFSET_X-1), Vector2(config.LEVEL_HEIGHT+2, config.LEVEL_WIDTH*2+3), symbol, symbol_attr)
 
-def render_level_frame(symbol: str = '#'):
-    stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y-1, config.LEVEL_SCREEN_OFFSET_X-1, symbol * (config.LEVEL_WIDTH * 2 + 4))
-    stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y + config.LEVEL_HEIGHT + 1, config.LEVEL_SCREEN_OFFSET_X-1, symbol * (config.LEVEL_WIDTH * 2 + 4))
-    for i in range(config.LEVEL_HEIGHT+1):
-        stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y + i, config.LEVEL_SCREEN_OFFSET_X-1, symbol)
-    
-    for i in range(config.LEVEL_HEIGHT+1):
-        stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y + i, config.LEVEL_SCREEN_OFFSET_X + config.LEVEL_WIDTH * 2 + 2, symbol)
-
-def initial_render():
+def initial_ingame_render():
     render_window_frame()
     render_hud()
     render_level_frame()
 
-def render_seperate():
+def render_current_menu():
+    global menu
+    global _screensize
+    render_frame(Vector2(math.floor(_screensize.y/2 - menu.size.y/2)-1, math.floor(_screensize.x/2 - menu.size.x/2)-1), menu.size.add(2, 2), ' ', curses.COLOR_BLACK)
+    render_frame(Vector2(math.floor(_screensize.y/2 - menu.size.y/2), math.floor(_screensize.x/2 - menu.size.x/2)), menu.size, menu.frame_symbol, menu.frame_attr)
+
+    stdscr.addstr(math.floor(_screensize.y/2 - menu.size.y/2), math.floor(_screensize.x/2 - len(menu.caption)/2), menu.caption)
+
+    for i in range(1, menu.size.y):
+        stdscr.addstr(math.floor(_screensize.y/2 - menu.size.y/2) + i, math.floor(_screensize.x/2 - menu.size.x/2)+1, ' ' * (menu.size.x - 2))
+    
+    max_option_len = len(menu.options[0][1]) if len(menu.options[0]) > 0 else 0
+    option_count = len(menu.options)
+    for i in range(len(menu.options)):
+        option = menu.options[i]
+        stdscr.addstr(math.floor(_screensize.y/2 - math.floor(option_count/2)) + i, math.floor(_screensize.x/2 - len(option[1])/2)+1, option[1])
+        max_option_len = max(max_option_len, len(option[1]))
+    
+    stdscr.addch(math.floor(_screensize.y/2 - math.floor(option_count/2)) + menu.selected_option, math.floor(_screensize.x/2 - max_option_len/2)-2, '>')
+
+def render_ingame_seperate():
     global stdscr
 
     for i in range(config.LEVEL_HEIGHT + 1):
@@ -228,7 +223,7 @@ def render_seperate():
     if(not level.player is None):
         stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y + level.player.pos.y, config.LEVEL_SCREEN_OFFSET_X + level.player.pos.x * 2, level.player.symbol)
 
-def render_matrix():
+def render_ingame_matrix():
     global stdscr
 
     render_matrix = []
@@ -247,8 +242,20 @@ def render_matrix():
         row = render_matrix[i]
         stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y + i, config.LEVEL_SCREEN_OFFSET_X, ''.join(row))
 
+def render():
+    global _gamestate
+    if(_gamestate == Gamestate.INGAME_BUILTIN or
+       _gamestate == Gamestate.INGAME_CUSTOM):
+        render_ingame_matrix()
+        if(config.DEBUG): render_debug()
+
+    elif(_gamestate == Gamestate.MAIN_MENU or
+         _gamestate == Gamestate.OPTIONS or
+         _gamestate == Gamestate.INGAME_PAUSED):
+        render_current_menu()
+
 def on_collide(a: GameObject, b: GameObject):
-    if(a.type == "Player" and b.type == "Flag"):
+    if(a.type == "Player" and b.type == "Flag" and not b.hidden):
         fire_event("ObtainedFlag")
 
     elif(a.type == "Player" and b.type == "Spawn" and level.flag.hidden):
@@ -307,6 +314,16 @@ def move_object(a: GameObject, move: Vector2):
 
     a.pos = a.pos.add(move_y, move_x)
 
+def change_gamestate(gamestate: Gamestate):
+    global _gamestate
+    global menu
+    if(gamestate == Gamestate.MAIN_MENU): menu = MENUS["MainMenu"]
+    elif(gamestate == Gamestate.OPTIONS): menu = MENUS["Options"]
+    elif(gamestate == Gamestate.INGAME_PAUSED): menu = MENUS["Paused"]
+    else: menu = None
+        
+    _gamestate = gamestate
+
 def tick():
     global stdscr
     global event_queue
@@ -321,7 +338,7 @@ def tick():
         
         elif(e.name == "InitializeLevel"):
             stdscr.clear()
-            initial_render()
+            initial_ingame_render()
 
         elif(e.name == "Shoot"):
             if(level.player.ammo_left <= 0): continue
@@ -345,9 +362,24 @@ def tick():
             play_sound('pickup')
             level.flag.hidden = True
         
+        elif(e.name == "ToMainMenu"):
+            change_gamestate(Gamestate.MAIN_MENU)
+
+        elif(e.name == "Victory"):
+            play_sound('victory')
+            change_gamestate(Gamestate.WINSCREEN)
+        
         elif(e.name == "FlagCaptured"):
             play_sound('level_complete')
-            load_level(level.num)
+            fire_event("LevelComplete")
+            if(_gamestate == Gamestate.INGAME_BUILTIN and level.num == BUILTIN_LEVELS_COUNT):
+                while not event_queue.empty():
+                    event_queue.get()
+
+                fire_event("Victory")
+                continue
+
+            load_level_builtin(level.num)
 
         elif(e.name == "PlayerDash"):
             if (not level.player.has_dash) or level.player.dash_speed == 0: return
@@ -363,12 +395,11 @@ def tick():
             if(level.player.invulnerable): return
             play_sound('hurt')
             level.player.health -= e.params
-            render_level_frame('!')
-            fire_event("PlayerHurtFlashOver", delay = 0.5)
+            render_level_frame('@', curses.color_pair(1))
+            fire_event("PlayerHurtFlashOver", delay = 0.2)
             # todo
         
         elif(e.name == "PlayerHurtFlashOver"):
-
             render_level_frame('#')
     
     for e in repeat_events: refire_event(e)
@@ -381,19 +412,20 @@ def main(stdscr_in):
     stdscr = stdscr_in
     stdscr.clear()
     stdscr.nodelay(True)
-    screen_height, screen_width = stdscr.getmaxyx()
+    update_screen_size()
 
-    if(screen_height < 30 or screen_width < 60):
+    if(_screensize.y < 30 or _screensize.x < 60):
         return 1
     
+    load_colors()
     pygame.mixer.init()
     load_sounds()
 
     lasttime = time.time_ns() / (10 ** 9)
     accumulator = 0
 
-    load_level(0)
-    initial_render()
+    _gamestate = Gamestate.INGAME_BUILTIN
+    load_level_builtin(0)
     while True:
         newtime = time.time_ns() / (10 ** 9)
         deltatime = newtime - lasttime
@@ -403,14 +435,16 @@ def main(stdscr_in):
         lasttime = newtime
         handle_input()
 
+        update_screen_size()
+
         if(accumulator >= config.TARGET_TIME_PER_TICK * 10):
             accumulator = config.TARGET_TIME_PER_TICK
         while (accumulator >= config.TARGET_TIME_PER_TICK):
             tick()
             accumulator -= config.TARGET_TIME_PER_TICK
-        render_matrix()
+        render()
         render_fps()
-        if(config.DEBUG): render_debug()
+
         if _quit:
             break
 
