@@ -13,7 +13,7 @@ import config
 import pygame
 from enum import Enum
 from levels_builtin import BUILTIN_LEVELS, BUILTIN_LEVELS_COUNT
-from models import sign, Vector2, GameObject, Player, Wall, Spawn, Flag, PlayerBullet, Event, GameLevel, Menu
+from models import *
 
 _sound_cache = {}
 _quit: bool = False
@@ -23,7 +23,7 @@ _registered_events = []
 _screensize: Vector2 = Vector2(10, 10)
 class Gamestate(Enum):
     MAIN_MENU = 0
-    INGAME_BUILTIN = 1
+    INGAME = 1
     INGAME_CUSTOM = 2
     INGAME_PAUSED = 3
     OPTIONS = 4
@@ -33,7 +33,7 @@ _options_saved_volume = config.VOLUME
 stdscr = None
 
 MENUS = {
-    "MainMenu": Menu(Vector2(16, 48), "FlagFortress", "", [
+    "MainMenu": Menu(Vector2(16, 48), "FlagFortress", "Capture the Flag in your terminal!", [
         ["play_builtin", "Start Game"],
         ["play_custom", "Play Custom Levels"],
         ["open_options", "Options"],
@@ -88,6 +88,8 @@ menu: Menu = None
 level: GameLevel = None
 last_move = Vector2(0, 0)
 event_queue = queue.SimpleQueue()
+saved_gamestate: Gamestate = Gamestate.INGAME
+saved_events = []
 
 def load_colors():
     curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_RED)
@@ -147,7 +149,7 @@ def handle_input():
     if(c == -1 or c == ""):
         return
     
-    if(_gamestate == Gamestate.INGAME_BUILTIN or
+    if(_gamestate == Gamestate.INGAME or
        _gamestate == Gamestate.INGAME_CUSTOM):
         if(c == "KEY_LEFT"):
             fire_event("PlayerMove", params = Vector2(0, -1))
@@ -203,7 +205,7 @@ def render_fps():
 
 def render_hud():
     if(level is None or level.player is None): return
-    stdscr.addstr(2, 3, "Arrow Keys - Move | C - Dash | F - Shoot | P - Pause")
+    stdscr.addstr(2, 3, "C - Dash | F - Shoot | P - Pause")
     stdscr.addstr(4, 3, f"HP: {level.player.health}")
     stdscr.addstr(5, 3, f"Ammo left: {level.player.ammo_left}")
     stdscr.addstr(7, 3, f"Level: {level.name} (#{level.num})")
@@ -255,12 +257,13 @@ def render_menu(menu: Menu, pos: Vector2):
     render_frame(Vector2(pos.y-math.floor(menu.size.y/2), pos.x-math.floor(menu.size.x/2)), menu.size, menu.frame_symbol, menu.frame_attr)
 
     stdscr.addstr(pos.y-math.floor(menu.size.y/2), pos.x-math.floor(len(menu.caption)/2), menu.caption)
-    description_lines = menu.description.split('\n')
-    for i in range(len(description_lines)):
-        stdscr.addstr(pos.y-math.floor(menu.size.y/2) + 2 + i, pos.x-math.floor(len(description_lines[i])/2), description_lines[i])
 
     for i in range(1, menu.size.y):
         stdscr.addstr(math.floor(pos.y - menu.size.y/2) + i, math.floor(pos.x - menu.size.x/2)+1, ' ' * (menu.size.x - 2))
+
+    description_lines = menu.description.split('\n')
+    for i in range(len(description_lines)):
+        stdscr.addstr(pos.y-math.floor(menu.size.y/2) + 2 + i, pos.x-math.floor(len(description_lines[i])/2), description_lines[i])
     
     max_option_len = len(menu.options[0][1]) if len(menu.options[0]) > 0 else 0
     option_count = len(menu.options)
@@ -300,6 +303,15 @@ def render_ingame_matrix():
     
     for obj in level.objects:
         if(obj.hidden): continue
+        if(obj.type == "Label"):
+            lines = obj.text.split('\n')
+            for i in range(len(lines)):
+                line = lines[i]
+                for j in range(len(line)):
+                    render_matrix[obj.pos.y+i][obj.pos.x*2+j] = line[j]
+
+            continue
+
         if((not 0 <= obj.pos.y <= config.LEVEL_HEIGHT) or (not 0 <= obj.pos.x <= config.LEVEL_WIDTH)): continue
         render_matrix[obj.pos.y][obj.pos.x*2] = obj.symbol
         if(ord(obj.symbol) > 255): render_matrix[obj.pos.y][obj.pos.x*2+1] = ''
@@ -322,7 +334,7 @@ def render():
 
     _screensize = new_screensize
 
-    if(_gamestate == Gamestate.INGAME_BUILTIN or
+    if(_gamestate == Gamestate.INGAME or
        _gamestate == Gamestate.INGAME_CUSTOM):
         render_ingame_matrix()
         if(config.DEBUG): render_debug()
@@ -408,18 +420,28 @@ def change_gamestate(gamestate: Gamestate):
         menu = MENUS["Options"]
     elif(gamestate == Gamestate.INGAME_PAUSED):
         menu = MENUS["Paused"]
-    elif(gamestate == Gamestate.INGAME_BUILTIN):
+    elif(gamestate == Gamestate.INGAME):
         menu = None
         load_level_builtin(num=0)
         render_hud()
     
     _gamestate = gamestate
 
+def on_level_complete():
+    if(_gamestate == Gamestate.INGAME and level.num == BUILTIN_LEVELS_COUNT):
+        while not event_queue.empty():
+            event_queue.get()
+
+        fire_event("Victory")
+        return
+            
+    load_level_builtin(level.num)
+
 def process_menu_action(action: str):
     global _quit
     global _options_saved_volume
     global menu
-    if(action == "play_builtin"): change_gamestate(Gamestate.INGAME_BUILTIN)
+    if(action == "play_builtin"): change_gamestate(Gamestate.INGAME)
     elif(action == "play_custom"): change_gamestate(Gamestate.INGAME_CUSTOM)
     elif(action == "open_options"):
         change_gamestate(Gamestate.OPTIONS)
@@ -477,6 +499,8 @@ def tick():
     global stdscr
     global event_queue
     global menu
+    global saved_gamestate
+    global saved_events
 
     repeat_events = []
     while(not event_queue.empty()):
@@ -525,6 +549,21 @@ def tick():
             play_sound('pickup')
             level.flag.hidden = True
         
+        elif(e.name == "Pause"):
+            saved_gamestate = _gamestate
+            saved_events.clear()
+            while not event_queue.empty():
+                saved_events.append(event_queue.get())
+            
+            change_gamestate(Gamestate.INGAME_PAUSED)
+        
+        elif(e.name == "Unpause"):
+            while len(saved_events) > 0:
+                event_queue.put(saved_events[-1])
+                saved_events.remove(saved_events[-1])
+
+            change_gamestate(Gamestate.IN)
+
         elif(e.name == "ToMainMenu"):
             change_gamestate(Gamestate.MAIN_MENU)
 
@@ -535,14 +574,7 @@ def tick():
         elif(e.name == "FlagCaptured"):
             play_sound('level_complete')
             fire_event("LevelComplete")
-            if(_gamestate == Gamestate.INGAME_BUILTIN and level.num == BUILTIN_LEVELS_COUNT):
-                while not event_queue.empty():
-                    event_queue.get()
-
-                fire_event("Victory")
-                continue
-
-            load_level_builtin(level.num)
+            on_level_complete()
 
         elif(e.name == "PlayerDash"):
             if (not level.player.has_dash) or level.player.dash_speed == 0: return

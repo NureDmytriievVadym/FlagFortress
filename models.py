@@ -47,6 +47,16 @@ class Wall(GameObject):
     @property
     def type(self): return "Wall"
 
+class Label(GameObject):
+    def __init__(self, pos: Vector2, text: str = "Label", text_attr: int = 0):
+        GameObject.__init__(self, pos, 'L')
+        self.order = -1
+        self.text = text
+        self.text_attr = text_attr
+    
+    @property
+    def type(self): return "Label"
+
 class Player(GameObject):
     def __init__(self, pos: Vector2, symbol: str = "🐛"):
         GameObject.__init__(self, pos, symbol)

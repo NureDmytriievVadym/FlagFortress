@@ -8,6 +8,7 @@ BUILTIN_LEVELS = [
         objects = [
             Spawn(Vector2(5, 5)),
             Flag(Vector2(5, 14)),
+            Label(Vector2(2, 2), "Use the arrow keys to move around\nGet the flag and bring it back to spawn to win")
         ]
     ),
     GameLevel(
