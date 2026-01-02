@@ -50,7 +50,7 @@ class Wall(GameObject):
 class Player(GameObject):
     def __init__(self, pos: Vector2, symbol: str = "🐛"):
         GameObject.__init__(self, pos, symbol)
-        self.health = 1
+        self.health = 3
         self.has_dash = True
         self.dash_speed = 3
         self.invulnerable = False
@@ -74,6 +74,13 @@ class Flag(GameObject):
     @property
     def type(self): return "Flag"
 
+class Hazard(GameObject):
+    def __init__(self, pos: Vector2, symbol: str = "❌", background: bool = False, breakable: bool = False):
+        GameObject.__init__(self, pos, symbol)
+
+    @property
+    def type(self): return "Hazard"
+
 class PlayerBullet(GameObject):
     def __init__(self, pos: Vector2, direction: Vector2, symbol: str = "+", speed: float = 5, pierce: int = 0):
         GameObject.__init__(self, pos, symbol)
@@ -89,7 +96,7 @@ class Event:
         self.name = name
         self.params = params
         # delay is in ticks
-        self.delay = math.ceil(delay_seconds * config.TICKRATE)
+        self.delay = math.ceil(delay_seconds * config.TARGET_TICKRATE)
         self.initial_delay = self.delay
 
 class GameLevel:

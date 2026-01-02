@@ -1,4 +1,6 @@
 """
+# pip install pygame
+# pip install playsound==1.2.2
 # pip install curses (linux)
 # pip install windows-curses (windows)
 """
@@ -7,9 +9,14 @@ import curses
 import time
 import queue
 import config
+import pygame
 from models import sign, Vector2, GameObject, Player, Wall, Spawn, Flag, PlayerBullet, Event, GameLevel
 
+_sound_cache = {}
 _quit: bool = False
+_frametime: float = 1
+_lifetime: float = 0
+_registered_events = []
 gamestate: int = 1 # 0 = main menu, 1 = ingame, 2 = paused, 3 = over
 stdscr = None
 
@@ -18,7 +25,11 @@ last_move = Vector2(0, 0)
 event_queue = queue.SimpleQueue()
 
 def fire_event(name: str, delay: float = 0, params: any = []):
-    event_queue.put(Event(name, delay, params))
+    global _lifetime
+    e: Event = Event(name, delay, params)
+    if(len(_registered_events) > 15): _registered_events.clear()
+    _registered_events.append((e, _lifetime))
+    event_queue.put(e)
 
 def refire_event(e: Event):
     event_queue.put(e)
@@ -30,7 +41,6 @@ def handle_input():
     try:
         c = stdscr.getkey()
     except:
-        time.sleep(0.01)
         pass
         
     if(c == -1 or c == ""):
@@ -48,10 +58,14 @@ def handle_input():
     if(c == "KEY_DOWN"):
         fire_event("PlayerMove", params = Vector2(1, 0))
         last_move = Vector2(1, 0)
+    if(c.lower() == "m"):
+        fire_event("ToMainMenu")
     if(c.lower() == "c"):
         fire_event("PlayerDash", params = last_move.mul(3))
     if(c.lower() == "f"):
         fire_event("Shoot")
+    if(c.lower() == "k"):
+        fire_event("PlayerHurt", params = 1)
 
 LEVELS = [
     GameLevel(
@@ -106,6 +120,27 @@ LEVELS = [
     )
 ]
 
+def load_sound(snd: str):
+    global _sound_cache
+    _sound_cache[snd] = pygame.mixer.Sound(f"snd/{snd}.wav")
+
+def load_sounds():
+    load_sound("dash")
+    load_sound("death")
+    load_sound("explosion")
+    load_sound("hurt")
+    load_sound("level_complete")
+    load_sound("pickup")
+    load_sound("rg_reloaded")
+    load_sound("rg_shoot_a")
+    load_sound("rg_shoot_b")
+    load_sound("rl_shoot")
+    load_sound("select")
+    load_sound("shoot")
+
+def play_sound(snd: str):
+    _sound_cache[snd].play()
+
 def load_level(i):
     global level
     global _quit
@@ -119,26 +154,41 @@ def load_level(i):
     level.player.ammo_left = level.starting_ammo
     fire_event("InitializeLevel")
 
+def get_fps():
+    return round(1.0 / _frametime)
+
+def render_fps():
+    maxy, maxx = stdscr.getmaxyx()
+    stdscr.addstr(2, maxx - 16, f"FPS: {get_fps()}     ")
+
 def render_hud():
-    stdscr.addstr(2, 3, "Q - Quit")
-    stdscr.addstr(3, 3, "Arrow Keys - Move")
-    stdscr.addstr(4, 3, "C - Dash")
-    stdscr.addstr(5, 3, "F - Shoot")
-    stdscr.addstr(6, 3, f"Ammo left: {0 if level.player is None else level.player.ammo_left}")
-    stdscr.addstr(8, 3, f"Level: {level.name} (#{level.num})")
-    stdscr.addstr(9, 3, "Get the flag and bring it back to spawn")
+    stdscr.addstr(2, 3, "Arrow Keys - Move | C - Dash | F - Shoot | M - Main Menu")
+    stdscr.addstr(4, 3, f"HP: {0 if level.player is None else level.player.health}")
+    stdscr.addstr(5, 3, f"Ammo left: {0 if level.player is None else level.player.ammo_left}")
+    stdscr.addstr(7, 3, f"Level: {level.name} (#{level.num})")
+    stdscr.addstr(8, 3, "Get the flag and bring it back to spawn")
+    render_fps()
 
 def render_debug():
-    for i in range(stdscr.getmaxyx()[0] - (config.LEVEL_SCREEN_OFFSET_Y + config.LEVEL_HEIGHT + 3)):
-        stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y + config.LEVEL_HEIGHT + 3 + i, 3, " " * 30)
+    global _registered_events
 
+    for i in range(stdscr.getmaxyx()[0] - (config.LEVEL_SCREEN_OFFSET_Y + config.LEVEL_HEIGHT + 4)):
+        stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y + config.LEVEL_HEIGHT + 3 + i, 3, " " * 60)
+
+    stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y + config.LEVEL_HEIGHT + 2, 3, "GameObjects")
     for i in range(len(level.objects)):
         obj = level.objects[i]
         stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y + config.LEVEL_HEIGHT + 3 + i, 3, obj.type + str(obj.pos))
+    
+    stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y + config.LEVEL_HEIGHT + 2, 40, "Events")
+    for i in range(len(_registered_events)):
+        e = _registered_events[i]
+        stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y + config.LEVEL_HEIGHT + 3 + i, 40, f"{'%.1f' % e[1]}: {e[0].name}")
 
-def initial_render():
+def render_window_frame(symbol: str = '.'):
     global stdscr
     screen_height, screen_width = stdscr.getmaxyx()
+
     for i in range(0, screen_width-1):
         stdscr.addch(0, i, '.')
     
@@ -151,15 +201,19 @@ def initial_render():
     for i in range(0, screen_height-1):
         stdscr.addch(i, screen_width-1, '.')
 
-    render_hud()
-
-    stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y-1, config.LEVEL_SCREEN_OFFSET_X-1, '#' * (config.LEVEL_WIDTH * 2 + 4))
-    stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y + config.LEVEL_HEIGHT + 1, config.LEVEL_SCREEN_OFFSET_X-1, '#' * (config.LEVEL_WIDTH * 2 + 4))
+def render_level_frame(symbol: str = '#'):
+    stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y-1, config.LEVEL_SCREEN_OFFSET_X-1, symbol * (config.LEVEL_WIDTH * 2 + 4))
+    stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y + config.LEVEL_HEIGHT + 1, config.LEVEL_SCREEN_OFFSET_X-1, symbol * (config.LEVEL_WIDTH * 2 + 4))
     for i in range(config.LEVEL_HEIGHT+1):
-        stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y + i, config.LEVEL_SCREEN_OFFSET_X-1, '#')
+        stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y + i, config.LEVEL_SCREEN_OFFSET_X-1, symbol)
     
     for i in range(config.LEVEL_HEIGHT+1):
-        stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y + i, config.LEVEL_SCREEN_OFFSET_X + config.LEVEL_WIDTH * 2 + 2, '#')
+        stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y + i, config.LEVEL_SCREEN_OFFSET_X + config.LEVEL_WIDTH * 2 + 2, symbol)
+
+def initial_render():
+    render_window_frame()
+    render_hud()
+    render_level_frame()
 
 def render_seperate():
     global stdscr
@@ -256,7 +310,6 @@ def move_object(a: GameObject, move: Vector2):
 def tick():
     global stdscr
     global event_queue
-    global ammo_left
 
     repeat_events = []
     while(not event_queue.empty()):
@@ -276,25 +329,29 @@ def tick():
             level.player.ammo_left -= 1
             render_hud()
 
+            play_sound('shoot')
+
             bullet = PlayerBullet(level.player.pos.copy(), last_move.normal())
             level.add_object(bullet)
             fire_event("BulletMove", 0, bullet)
         
         elif(e.name == "BulletMove"):
             bullet = e.params
-            if(bullet == None): continue
+            if(bullet == None or bullet.deleted): continue
             move_object(bullet, bullet.direction)
             fire_event("BulletMove", 1 / bullet.speed, bullet)
         
         elif(e.name == "ObtainedFlag"):
+            play_sound('pickup')
             level.flag.hidden = True
         
         elif(e.name == "FlagCaptured"):
-            ammo_left = 4
+            play_sound('level_complete')
             load_level(level.num)
 
         elif(e.name == "PlayerDash"):
             if (not level.player.has_dash) or level.player.dash_speed == 0: return
+            play_sound('dash')
             level.player.invulnerable = True
             fire_event("PlayerMove", params = last_move.mul(level.player.dash_speed))
             level.player.invulnerable = False
@@ -304,14 +361,23 @@ def tick():
         
         elif(e.name == "PlayerHurt"):
             if(level.player.invulnerable): return
+            play_sound('hurt')
             level.player.health -= e.params
+            render_level_frame('!')
+            fire_event("PlayerHurtFlashOver", delay = 0.5)
             # todo
+        
+        elif(e.name == "PlayerHurtFlashOver"):
+
+            render_level_frame('#')
     
     for e in repeat_events: refire_event(e)
 
 def main(stdscr_in):
     global stdscr
     global _quit
+    global _lifetime
+    global _frametime
     stdscr = stdscr_in
     stdscr.clear()
     stdscr.nodelay(True)
@@ -319,6 +385,9 @@ def main(stdscr_in):
 
     if(screen_height < 30 or screen_width < 60):
         return 1
+    
+    pygame.mixer.init()
+    load_sounds()
 
     lasttime = time.time_ns() / (10 ** 9)
     accumulator = 0
@@ -328,19 +397,24 @@ def main(stdscr_in):
     while True:
         newtime = time.time_ns() / (10 ** 9)
         deltatime = newtime - lasttime
+        _frametime = deltatime
+        _lifetime += deltatime
         accumulator += deltatime
         lasttime = newtime
         handle_input()
 
-        if(accumulator >= config.TIME_PER_TICK * 10):
-            accumulator = config.TIME_PER_TICK
-        while (accumulator >= config.TIME_PER_TICK):
+        if(accumulator >= config.TARGET_TIME_PER_TICK * 10):
+            accumulator = config.TARGET_TIME_PER_TICK
+        while (accumulator >= config.TARGET_TIME_PER_TICK):
             tick()
-            accumulator -= config.TIME_PER_TICK
+            accumulator -= config.TARGET_TIME_PER_TICK
         render_matrix()
+        render_fps()
         if(config.DEBUG): render_debug()
         if _quit:
             break
+
+        if(_frametime < config.TARGET_FRAMETIME): time.sleep(config.TARGET_FRAMETIME)
     
     return 0
 
