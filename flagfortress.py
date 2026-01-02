@@ -5,6 +5,7 @@
 
 import curses
 import time
+import math
 import queue
 import config
 from models import Vector2, GameObject, Event, GameLevel
@@ -13,7 +14,7 @@ _quit: bool = False
 gamestate: int = 1 # 0 = main menu, 1 = ingame, 2 = paused, 3 = over
 stdscr = None
 
-ammo_left = config.AMMO_PER_LEVEL
+ammo_left = 0
 level = {}
 last_move = Vector2(0, 0)
 event_queue = queue.SimpleQueue()
@@ -60,8 +61,8 @@ LEVELS = [
         name = "Flag",
         starting_ammo = 0,
         objects = [
-            GameObject(Vector2(3, 3), "Spawn", '⭕'),
-            GameObject(Vector2(3, 10), "Flag", '🚩'),
+            GameObject(Vector2(5, 5), "Spawn", '⭕'),
+            GameObject(Vector2(5, 14), "Flag", '🚩'),
         ]
     ),
     GameLevel(
@@ -69,8 +70,15 @@ LEVELS = [
         name = "Walls",
         starting_ammo = 0,
         objects = [
-            GameObject(Vector2(3, 3), "Spawn", '⭕'),
-            GameObject(Vector2(3, 10), "Flag", '🚩'),
+            GameObject(Vector2(5, 5), "Spawn", '⭕'),
+            GameObject(Vector2(5, 14), "Flag", '🚩'),
+            GameObject(Vector2(2, 10), "Wall", '⬛'),
+            GameObject(Vector2(3, 10), "Wall", '⬛'),
+            GameObject(Vector2(4, 10), "Wall", '⬛'),
+            GameObject(Vector2(5, 10), "Wall", '⬛'),
+            GameObject(Vector2(6, 10), "Wall", '⬛'),
+            GameObject(Vector2(7, 10), "Wall", '⬛'),
+            GameObject(Vector2(8, 10), "Wall", '⬛'),
         ]
     )
 ]
@@ -128,6 +136,15 @@ def render():
         if(obj.hidden): continue
         stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y + obj.pos.y, config.LEVEL_SCREEN_OFFSET_X + obj.pos.x * 2, obj.symbol)
 
+def on_collide(a: GameObject, b: GameObject):
+    if(a.type == "Player" and b.type == "Flag"):
+        fire_event("ObtainedFlag")
+
+    if(a.type == "Player" and b.type == "Spawn" and level.flag.hidden):
+        fire_event("FlagCaptured")
+
+    return a.type == "Player" and (b.type == "Wall" or b.type == "BreakableWall")
+
 def tick():
     global stdscr
     global event_queue
@@ -160,18 +177,34 @@ def tick():
             load_level(level.num)
 
         if(e.name == "PlayerAttemptMove"):
-            if(level.player.pos.x + e.params.x > config.LEVEL_WIDTH or level.player.pos.x + e.params.x < 0): e.params.x = 0
-            if(level.player.pos.y + e.params.y > config.LEVEL_HEIGHT or level.player.pos.y + e.params.y < 0): e.params.y = 0
+            plr_move_x = 0
+            plr_move_y = 0
 
-            level.player.pos = level.player.pos.add(e.params.y, e.params.x)
+            for i in range(round(math.copysign(1, e.params.x)), e.params.x + round(math.copysign(1, e.params.x)), round(math.copysign(1, e.params.x))):
+                if(level.player.pos.x + i > config.LEVEL_WIDTH or level.player.pos.x + i < 0): break
+                collided = False
+                for obj in level.objects:
+                    if(level.player.pos.add(0, i) == obj.pos):
+                        if(on_collide(level.player, obj)):
+                            collided = True
+                            break
+                if collided: break
 
-            for obj in level.objects:
-                if(obj.pos.x == level.player.pos.x and obj.pos.y == level.player.pos.y and obj != level.player):
-                    if(obj.type == "Spawn" and level.flag.hidden):
-                        fire_event("FlagCaptured")
+                plr_move_x = i
+            
+            for i in range(round(math.copysign(1, e.params.y)), e.params.y + round(math.copysign(1, e.params.y)), round(math.copysign(1, e.params.y))):
+                if(level.player.pos.y + i > config.LEVEL_HEIGHT or level.player.pos.y + i < 0): break
+                collided = False
+                for obj in level.objects:
+                    if(level.player.pos.add(i, 0) == obj.pos):
+                        if(on_collide(level.player, obj)):
+                            collided = True
+                            break
+                if collided: break
 
-                    if(obj.type == "Flag"):
-                        fire_event("ObtainedFlag")
+                plr_move_y = i
+
+            level.player.pos = level.player.pos.add(plr_move_y, plr_move_x)
     
     for e in repeat_events: refire_event(e)
 

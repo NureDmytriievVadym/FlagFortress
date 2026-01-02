@@ -15,6 +15,9 @@ class Vector2:
     def mul(self, multiplier: float):
         return Vector2(round(self.y * multiplier), round(self.x * multiplier))
 
+    def __eq__(self, value):
+        return self.y == value.y and self.x == value.x
+
 class GameObject:
     def __init__(self, pos: Vector2, type: str, symbol: str, hidden: bool = False):
         self.pos = pos
