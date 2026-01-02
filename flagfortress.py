@@ -7,13 +7,7 @@ import curses
 import time
 import queue
 from collections.abc import Callable
-
-TICKRATE = 100
-TIME_PER_TICK = 1 / TICKRATE
-
-LEVEL_WIDTH = 30
-LEVEL_HEIGHT = 20
-LEVEL_SCREEN_OFFSET_Y, LEVEL_SCREEN_OFFSET_X = 10, 3
+import config
 
 _quit: bool = False
 gamestate: int = 0 # 0 = main menu, 1 = ingame, 2 = paused, 3 = over
@@ -37,7 +31,7 @@ class Event:
         self.name = name
         self.params = params
         # delay is in ticks
-        self.delay = (delay_seconds * TICKRATE).__ceil__()
+        self.delay = (delay_seconds * config.TICKRATE).__ceil__()
         self.initial_delay = self.delay
 
 def handle_input():
@@ -95,17 +89,17 @@ def initial_render():
     stdscr.addstr(7, 3, "Level: 1")
     stdscr.addstr(8, 3, "Get the flag!")
 
-    for i in range(LEVEL_WIDTH*2+2):
-        stdscr.addch(LEVEL_SCREEN_OFFSET_Y-1, LEVEL_SCREEN_OFFSET_X-1+i, '#')
+    for i in range(config.LEVEL_WIDTH*2+2):
+        stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y-1, config.LEVEL_SCREEN_OFFSET_X-1+i, '#')
     
-    for i in range(LEVEL_WIDTH*2+2):
-        stdscr.addch(LEVEL_SCREEN_OFFSET_Y + LEVEL_HEIGHT + 1, LEVEL_SCREEN_OFFSET_X-1+i, '#')
+    for i in range(config.LEVEL_WIDTH*2+2):
+        stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y + config.LEVEL_HEIGHT + 1, config.LEVEL_SCREEN_OFFSET_X-1+i, '#')
     
-    for i in range(LEVEL_HEIGHT+1):
-        stdscr.addch(LEVEL_SCREEN_OFFSET_Y + i, LEVEL_SCREEN_OFFSET_X-1, '#')
+    for i in range(config.LEVEL_HEIGHT+1):
+        stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y + i, config.LEVEL_SCREEN_OFFSET_X-1, '#')
     
-    for i in range(LEVEL_HEIGHT+1):
-        stdscr.addch(LEVEL_SCREEN_OFFSET_Y + i, LEVEL_SCREEN_OFFSET_X + LEVEL_WIDTH * 2 + 1, '#')
+    for i in range(config.LEVEL_HEIGHT+1):
+        stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y + i, config.LEVEL_SCREEN_OFFSET_X + config.LEVEL_WIDTH * 2 + 1, '#')
 
 LEVELS = [
     {
@@ -144,11 +138,11 @@ def tick():
             continue
         
         if(e.name == "InitializeLevel"):
-            for i in range(LEVEL_HEIGHT):
-                stdscr.addstr(LEVEL_SCREEN_OFFSET_Y + i, LEVEL_SCREEN_OFFSET_X, " " * LEVEL_WIDTH * 2)
+            for i in range(config.LEVEL_HEIGHT):
+                stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y + i, config.LEVEL_SCREEN_OFFSET_X, " " * config.LEVEL_WIDTH * 2)
 
-            stdscr.addch(LEVEL_SCREEN_OFFSET_Y + level["Player"].y, LEVEL_SCREEN_OFFSET_X + level["Player"].x * 2, level["Player"].symbol)
-            stdscr.addch(LEVEL_SCREEN_OFFSET_Y + level["Flag"].y, LEVEL_SCREEN_OFFSET_X + level["Flag"].x * 2, level["Flag"].symbol)
+            stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y + level["Player"].y, config.LEVEL_SCREEN_OFFSET_X + level["Player"].x * 2, level["Player"].symbol)
+            stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y + level["Flag"].y, config.LEVEL_SCREEN_OFFSET_X + level["Flag"].x * 2, level["Flag"].symbol)
         
         if(e.name == "Shoot"):
             ammo_left -= 1
@@ -163,14 +157,14 @@ def tick():
             load_level(level["Level"])
 
         if(e.name == "PlayerAttemptMove"):
-            stdscr.addch(LEVEL_SCREEN_OFFSET_Y + level["Player"].y, LEVEL_SCREEN_OFFSET_X + level["Player"].x * 2, " ")
+            stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y + level["Player"].y, config.LEVEL_SCREEN_OFFSET_X + level["Player"].x * 2, " ")
             for obj in level["Objects"]:
                 if(obj.x == level["Player"].x and obj.y == level["Player"].y and obj != level["Player"] and not obj.hidden):
-                    stdscr.addch(LEVEL_SCREEN_OFFSET_Y + level["Player"].y, LEVEL_SCREEN_OFFSET_X + level["Player"].x * 2, obj.symbol)
+                    stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y + level["Player"].y, config.LEVEL_SCREEN_OFFSET_X + level["Player"].x * 2, obj.symbol)
 
             level["Player"].x += e.params[0]
             level["Player"].y += e.params[1]
-            stdscr.addch(LEVEL_SCREEN_OFFSET_Y + level["Player"].y, LEVEL_SCREEN_OFFSET_X + level["Player"].x * 2, level["Player"].symbol)
+            stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y + level["Player"].y, config.LEVEL_SCREEN_OFFSET_X + level["Player"].x * 2, level["Player"].symbol)
 
             for obj in level["Objects"]:
                 if(obj.x == level["Player"].x and obj.y == level["Player"].y and obj != level["Player"]):
@@ -206,11 +200,11 @@ def main(stdscr_in):
         lasttime = newtime
         handle_input()
 
-        if(accumulator >= TIME_PER_TICK * 10):
-            accumulator = TIME_PER_TICK
-        while (accumulator >= TIME_PER_TICK):
+        if(accumulator >= config.TIME_PER_TICK * 10):
+            accumulator = config.TIME_PER_TICK
+        while (accumulator >= config.TIME_PER_TICK):
             tick()
-            accumulator -= TIME_PER_TICK
+            accumulator -= config.TIME_PER_TICK
 
         if _quit:
             break
