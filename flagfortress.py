@@ -8,31 +8,19 @@ import time
 import queue
 from collections.abc import Callable
 import config
+from models import Vector2, GameObject, Event
 
 _quit: bool = False
-gamestate: int = 0 # 0 = main menu, 1 = ingame, 2 = paused, 3 = over
+gamestate: int = 1 # 0 = main menu, 1 = ingame, 2 = paused, 3 = over
 stdscr = None
 
-ammo_left = 4
+ammo_left = config.AMMO_PER_LEVEL
 level = {}
-last_move = (1, 0)
+last_move = Vector2(0, 0)
 event_queue = queue.SimpleQueue()
 
-class GameObject:
-    def __init__(self, x: int, y: int, type: str, symbol: str, hidden: bool = False):
-        self.x = x
-        self.y = y
-        self.type = type
-        self.symbol = symbol
-        self.hidden = hidden
-
-class Event:
-    def __init__(self, name: str, delay_seconds: float = 0, params = None):
-        self.name = name
-        self.params = params
-        # delay is in ticks
-        self.delay = (delay_seconds * config.TICKRATE).__ceil__()
-        self.initial_delay = self.delay
+def fire_event(e: Event):
+    event_queue.put(e)
 
 def handle_input():
     global stdscr
@@ -48,24 +36,54 @@ def handle_input():
         return
     
     if(c == "KEY_LEFT"):
-        event_queue.put(Event("PlayerAttemptMove", 0, (-1, 0)))
-        last_move = (-1, 0)
+        fire_event(Event("PlayerAttemptMove", 0, Vector2(0, -1)))
+        last_move = Vector2(0, -1)
     if(c == "KEY_RIGHT"):
-        event_queue.put(Event("PlayerAttemptMove", 0, (1, 0)))
-        last_move = (1, 0)
+        fire_event(Event("PlayerAttemptMove", 0, Vector2(0, 1)))
+        last_move = Vector2(0, 1)
     if(c == "KEY_UP"):
-        event_queue.put(Event("PlayerAttemptMove", 0, (0, -1)))
-        last_move = (0, -1)
+        fire_event(Event("PlayerAttemptMove", 0, Vector2(-1, 0)))
+        last_move = Vector2(-1, 0)
     if(c == "KEY_DOWN"):
-        event_queue.put(Event("PlayerAttemptMove", 0, (0, 1)))
-        last_move = (0, 1)
+        fire_event(Event("PlayerAttemptMove", 0, Vector2(1, 0)))
+        last_move = Vector2(1, 0)
     if(c.lower() == "c"):
-        move = list(last_move)
-        move[0] *= 3
-        move[1] *= 3
-        event_queue.put(Event("PlayerAttemptMove", 0, move))
+        fire_event(Event("PlayerAttemptMove", 0, last_move.mul(3)))
     if(c.lower() == "f"):
-        event_queue.put(Event("Shoot", 0))
+        fire_event(Event("Shoot"))
+
+LEVELS = [
+    {
+        "Level": 1,
+        "Ammo": 0,
+        "Spawn": GameObject(Vector2(3, 3), "Spawn", '⭕'),
+        "Flag": GameObject(Vector2(3, 10), "Flag", '🚩'),
+        "Objects": []
+    },
+    {
+        "Level": 2,
+        "Ammo": config.AMMO_PER_LEVEL,
+        "Spawn": GameObject(Vector2(3, 3), "Spawn", '⭕'),
+        "Flag": GameObject(Vector2(3, 10), "Flag", '🚩'),
+        "Objects": []
+    }
+]
+
+def load_level(i):
+    global level
+    global ammo_left
+    global _quit
+    if(len(LEVELS) == i):
+        _quit = True
+        return
+    
+    level = LEVELS[i]
+    level["Player"] = GameObject(level["Spawn"].pos.copy(), "Player", "🐛")
+    level["Objects"].append(level["Spawn"])
+    level["Objects"].append(level["Flag"])
+    level["Objects"].append(level["Player"])
+    ammo_left = LEVELS[i]["Ammo"]
+    fire_event(Event("InitializeLevel"))
 
 def initial_render():
     global stdscr
@@ -89,40 +107,22 @@ def initial_render():
     stdscr.addstr(7, 3, "Level: 1")
     stdscr.addstr(8, 3, "Get the flag!")
 
-    for i in range(config.LEVEL_WIDTH*2+2):
-        stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y-1, config.LEVEL_SCREEN_OFFSET_X-1+i, '#')
-    
-    for i in range(config.LEVEL_WIDTH*2+2):
-        stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y + config.LEVEL_HEIGHT + 1, config.LEVEL_SCREEN_OFFSET_X-1+i, '#')
-    
+    stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y-1, config.LEVEL_SCREEN_OFFSET_X-1, '#' * (config.LEVEL_WIDTH * 2 + 4))
+    stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y + config.LEVEL_HEIGHT + 1, config.LEVEL_SCREEN_OFFSET_X-1, '#' * (config.LEVEL_WIDTH * 2 + 4))
     for i in range(config.LEVEL_HEIGHT+1):
         stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y + i, config.LEVEL_SCREEN_OFFSET_X-1, '#')
     
     for i in range(config.LEVEL_HEIGHT+1):
-        stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y + i, config.LEVEL_SCREEN_OFFSET_X + config.LEVEL_WIDTH * 2 + 1, '#')
+        stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y + i, config.LEVEL_SCREEN_OFFSET_X + config.LEVEL_WIDTH * 2 + 2, '#')
 
-LEVELS = [
-    {
-        "Level": 1,
-        "Spawn": GameObject(3, 3, "Spawn", '⭕'),
-        "Flag": GameObject(3, 10, "Flag", '🚩'),
-        "Objects": []
-    }
-]
-
-def load_level(i):
-    global level
-    global _quit
-    if(len(LEVELS) == i):
-        _quit = True
-        return
+def render():
+    global stdscr
+    for i in range(config.LEVEL_HEIGHT + 1):
+        stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y + i, config.LEVEL_SCREEN_OFFSET_X, " " * (config.LEVEL_WIDTH * 2 + 1))
     
-    level = LEVELS[i]
-    level["Player"] = GameObject(level["Spawn"].x, level["Spawn"].y, "Player", "🐛")
-    level["Objects"].append(level["Spawn"])
-    level["Objects"].append(level["Flag"])
-    level["Objects"].append(level["Player"])
-    event_queue.put(Event("InitializeLevel"))
+    for obj in level["Objects"]:
+        if(obj.hidden): continue
+        stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y + obj.pos.y, config.LEVEL_SCREEN_OFFSET_X + obj.pos.x * 2, obj.symbol)
 
 def tick():
     global stdscr
@@ -138,13 +138,12 @@ def tick():
             continue
         
         if(e.name == "InitializeLevel"):
-            for i in range(config.LEVEL_HEIGHT):
-                stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y + i, config.LEVEL_SCREEN_OFFSET_X, " " * config.LEVEL_WIDTH * 2)
+            stdscr.clear()
+            initial_render()
 
-            stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y + level["Player"].y, config.LEVEL_SCREEN_OFFSET_X + level["Player"].x * 2, level["Player"].symbol)
-            stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y + level["Flag"].y, config.LEVEL_SCREEN_OFFSET_X + level["Flag"].x * 2, level["Flag"].symbol)
-        
         if(e.name == "Shoot"):
+            if(ammo_left <= 0): continue
+
             ammo_left -= 1
             stdscr.addstr(5, 3, f"Ammo left: {ammo_left}")
         
@@ -157,25 +156,20 @@ def tick():
             load_level(level["Level"])
 
         if(e.name == "PlayerAttemptMove"):
-            stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y + level["Player"].y, config.LEVEL_SCREEN_OFFSET_X + level["Player"].x * 2, " ")
-            for obj in level["Objects"]:
-                if(obj.x == level["Player"].x and obj.y == level["Player"].y and obj != level["Player"] and not obj.hidden):
-                    stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y + level["Player"].y, config.LEVEL_SCREEN_OFFSET_X + level["Player"].x * 2, obj.symbol)
+            if(level["Player"].pos.x + e.params.x > config.LEVEL_WIDTH or level["Player"].pos.x + e.params.x < 0): e.params.x = 0
+            if(level["Player"].pos.y + e.params.y > config.LEVEL_HEIGHT or level["Player"].pos.y + e.params.y < 0): e.params.y = 0
 
-            level["Player"].x += e.params[0]
-            level["Player"].y += e.params[1]
-            stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y + level["Player"].y, config.LEVEL_SCREEN_OFFSET_X + level["Player"].x * 2, level["Player"].symbol)
+            level["Player"].pos = level["Player"].pos.add(e.params.y, e.params.x)
 
             for obj in level["Objects"]:
-                if(obj.x == level["Player"].x and obj.y == level["Player"].y and obj != level["Player"]):
+                if(obj.pos.x == level["Player"].pos.x and obj.pos.y == level["Player"].pos.y and obj != level["Player"]):
                     if(obj.type == "Spawn" and level["Flag"].hidden):
-                        event_queue.put(Event("FlagCaptured"))
+                        fire_event(Event("FlagCaptured"))
 
                     if(obj.type == "Flag"):
-                        event_queue.put(Event("ObtainedFlag"))
+                        fire_event(Event("ObtainedFlag"))
     
-    for e in repeat_events:
-        event_queue.put(e)
+    for e in repeat_events: fire_event(e)
 
 def main(stdscr_in):
     global stdscr
@@ -205,7 +199,7 @@ def main(stdscr_in):
         while (accumulator >= config.TIME_PER_TICK):
             tick()
             accumulator -= config.TIME_PER_TICK
-
+        render()
         if _quit:
             break
     
