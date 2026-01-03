@@ -240,7 +240,7 @@ class Mercenary(Enemy):
         self.think_cooldown = 1.0 / self.speed + (random.random() - 0.5) * 2 * self.speed_random_deviation
 
         if(manhattan_distance(self.pos, level.player.pos) <= 1):
-            self.think_cooldown = 2
+            self.think_cooldown /= 2
             return EnemyAction("TackleEntity", target=level.player)
         
         self.look_at(level.player.pos)
@@ -248,7 +248,9 @@ class Mercenary(Enemy):
             move = astar_next_move(self.pos, level.player.pos, level)
             if not move is None: return EnemyAction("Move", move=Vector2(move.y - self.pos.y, move.x - self.pos.x))
         else:
-            if(self.get_selected_weapon().ammo == 0): return EnemyAction("Reload")
+            if(self.get_selected_weapon().ammo == 0):
+                self.think_cooldown += 1
+                return EnemyAction("Reload")
             else: return EnemyAction("Shoot")
         
         return None

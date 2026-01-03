@@ -223,6 +223,11 @@ def handle_input():
         elif(c.lower() == "c"): fire_event("PlayerDash")
         elif(c.lower() == "r"): fire_event("PlayerReload")
         elif(c.lower() == "f"): fire_event("PlayerShoot")
+        elif(c.lower() == "1"): fire_event("PlayerWeaponSwitch", params=1)
+        elif(c.lower() == "2"): fire_event("PlayerWeaponSwitch", params=2)
+        elif(c.lower() == "3"): fire_event("PlayerWeaponSwitch", params=3)
+        elif(c.lower() == "4"): fire_event("PlayerWeaponSwitch", params=4)
+        elif(c.lower() == "5"): fire_event("PlayerWeaponSwitch", params=5)
         elif(c.lower() == "k" and config.DEBUG): fire_event("TestEventA")
         elif(c.lower() == "l" and config.DEBUG): fire_event("TestEventB")
         elif(c.lower() == "p"): fire_event("Pause")
@@ -289,11 +294,15 @@ def render_hud():
     global _hud_frame_symbol, _hud_frame_attr
     if(level is None or level.player is None): return
     HUD_SIZE = Vector2(HUD_SIZE.y, _screensize.x-1)
-    ITEMS_PANEL_POS = Vector2(1, 10)
+    ITEMS_PANEL_POS = Vector2(1, 12)
     ITEMS_PANEL_SIZE = Vector2(HUD_SIZE.y-2, 8)
+    # clear hud
+    for i in range(1, HUD_SIZE.y):
+        stdscr.addstr(i, 1, ' ' * (HUD_SIZE.x - 2))
+
     render_frame(Vector2(0, 0), HUD_SIZE, _hud_frame_symbol, _hud_frame_attr)
-    stdscr.addstr(2, 3, "❤️        ")
-    stdscr.addstr(3, 3, "🛡️        ")
+    stdscr.addstr(2, 3, "❤️")
+    stdscr.addstr(3, 3, "🛡️")
     stdscr.addstr(2, 6, f"{level.player.health}")
     stdscr.addstr(3, 6, f"{level.player.armor}")
     render_frame(ITEMS_PANEL_POS, ITEMS_PANEL_SIZE, '*')
@@ -301,8 +310,24 @@ def render_hud():
     if level.player.has_dash: stdscr.addstr(ITEMS_PANEL_POS.y + 1, ITEMS_PANEL_POS.x + 2, "💨")
     if level.player.has_flag: stdscr.addstr(ITEMS_PANEL_POS.y + 1, ITEMS_PANEL_POS.x + 4, "🚩")
 
-    stdscr.addstr(7, 3, f"Level: {level.name}")
-    stdscr.addstr(8, 3, "Get the flag and bring it back to spawn")
+    # weapons
+    WEAPON_PANEL_SIZE = Vector2(HUD_SIZE.y-2, 6)
+    selected_weapon: BaseWeapon = level.player.get_selected_weapon()
+    wep_count = len(level.player.weapons)
+    for i in range(wep_count):
+        weapon: BaseWeapon = level.player.weapons[i]
+        stdscr.addstr(1, _screensize.x - 8 - (wep_count-i-1) * (WEAPON_PANEL_SIZE.x + 1), '-' * WEAPON_PANEL_SIZE.x)
+        stdscr.addstr(1, _screensize.x - 8 - (wep_count-i-1) * (WEAPON_PANEL_SIZE.x + 1) + 2, weapon.shorthand)
+        stdscr.addstr(2, _screensize.x - 8 - (wep_count-i-1) * (WEAPON_PANEL_SIZE.x + 1) + 1, f"🏹 {weapon.ammo}")
+        stdscr.addstr(3, _screensize.x - 8 - (wep_count-i-1) * (WEAPON_PANEL_SIZE.x + 1) + 1, f"📦 {weapon.ammo_reserve}")
+        if weapon == selected_weapon:
+            stdscr.addstr(4, _screensize.x - 8 - (wep_count-i-1) * (WEAPON_PANEL_SIZE.x + 1), '^' * WEAPON_PANEL_SIZE.x)
+    
+    stdscr.addstr(1, _screensize.x - 6 - (WEAPON_PANEL_SIZE.x + 1) * len(level.player.weapons), '| W')
+    stdscr.addstr(2, _screensize.x - 6 - (WEAPON_PANEL_SIZE.x + 1) * len(level.player.weapons), '| E')
+    stdscr.addstr(3, _screensize.x - 6 - (WEAPON_PANEL_SIZE.x + 1) * len(level.player.weapons), '| P')
+    stdscr.addstr(4, _screensize.x - 6 - (WEAPON_PANEL_SIZE.x + 1) * len(level.player.weapons), '| S')
+        
 
 def render_frame(pos: Vector2, size: Vector2, symbol: str = '#', symbol_attr: int = 0):
     try: stdscr.addstr(pos.y, pos.x, symbol * size.x, symbol_attr)
@@ -529,8 +554,8 @@ def move_object(a: GameObject, move: Vector2):
 
     if move.x != 0:
         for i in range(sign(move.x), move.x + sign(move.x), sign(move.x)):
-            if 0 > a.pos.x + i >= level.size.x:
-                if(a.type == "Player"): break
+            if not 0 <= a.pos.x + i < level.size.x:
+                if issubclass(type(a), Entity): break
                 else:
                     level.delete_object(a)
                     return
@@ -546,8 +571,8 @@ def move_object(a: GameObject, move: Vector2):
     
     if move.y != 0:
         for i in range(sign(move.y), move.y + sign(move.y), sign(move.y)):
-            if 0 > a.pos.y + i >= level.size.y:
-                if(a.type == "Player"): break
+            if not 0 <= a.pos.y + i < level.size.y:
+                if issubclass(type(a), Entity): break
                 else:
                     level.delete_object(a)
                     return
@@ -849,16 +874,28 @@ def tick():
                 fire_event("Defeat", delay=0.01)
             else:
                 play_sound('kill')
+            
+        elif(e.name == "PlayerWeaponSwitch"):
+            fire_event("EntityWeaponSwitch", params=(level.player, e.params-1))
+        
+        elif(e.name == "EntityWeaponSwitch"):
+            entity, num = e.params
+            if entity.deleted: continue
+            if not 0 <= num < len(entity.weapons): continue
+            if num == entity.selected_weapon_index: continue
+            entity.selected_weapon_index = num
+            play_sound("weapons/change")
         
         elif(e.name == "PlayerReload"):
             fire_event("EntityReload", params=level.player)
-
+        
         elif(e.name == "EntityReload"):
             entity: Entity = e.params
             selected_weapon: BaseWeapon = entity.get_selected_weapon()
 
             if selected_weapon is None: continue
             if selected_weapon.reloading > 0 or selected_weapon.reloading_time_left > 0: continue
+            if selected_weapon.ammo_reserve <= 0 and selected_weapon.ammo_reserve != -1: continue
 
             play_random_sound(selected_weapon.sounds["reload"])
             selected_weapon.reload()
