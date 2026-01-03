@@ -183,6 +183,12 @@ def play_sound(snd: str):
     _sound_cache[snd].set_volume(math.sqrt(config.VOLUME / 100.0))
     _sound_cache[snd].play()
 
+def play_random_sound(snds: list[str]):
+    if len(snds) == 0: return
+    selected_sound = snds[math.floor(random.random() * len(snds))]
+    _sound_cache[selected_sound].set_volume(math.sqrt(config.VOLUME / 100.0))
+    _sound_cache[selected_sound].play()
+
 def save_settings():
     with open("config.py", "w") as f:
         for key, val in config.__dict__.items():
@@ -215,8 +221,10 @@ def handle_input():
         elif(c == "KEY_UP"): fire_event("PlayerMove", params = Vector2(-1, 0))
         elif(c == "KEY_DOWN"): fire_event("PlayerMove", params = Vector2(1, 0))
         elif(c.lower() == "c"): fire_event("PlayerDash")
+        elif(c.lower() == "r"): fire_event("PlayerReload")
         elif(c.lower() == "f"): fire_event("PlayerShoot")
-        elif(c.lower() == "k" and config.DEBUG): fire_event("TestEvent")
+        elif(c.lower() == "k" and config.DEBUG): fire_event("TestEventA")
+        elif(c.lower() == "l" and config.DEBUG): fire_event("TestEventB")
         elif(c.lower() == "p"): fire_event("Pause")
     else:
         if(c == "KEY_UP"): fire_event("MoveMenuOption", params = -1)
@@ -715,8 +723,7 @@ def tick():
         for entity in [entity for entity in level.objects if issubclass(type(entity), Entity)]:
             if entity.deleted: continue
 
-            selected_weapon: BaseWeapon = (None if (entity.selected_weapon_index == -1 or len(entity.weapons) == 0)
-                                                else entity.weapons[entity.selected_weapon_index])
+            selected_weapon: BaseWeapon = entity.get_selected_weapon()
 
             if not selected_weapon is None:
                 selected_weapon.shooting_time_left = max(0, selected_weapon.shooting_time_left - dt)
@@ -728,12 +735,14 @@ def tick():
                     selected_weapon.reloading_time_left -= dt
 
             if issubclass(type(entity), Enemy):
-                decision = entity.think(level, dt)
+                decision: EnemyAction = entity.think(level, dt)
                 if decision is None: continue
                 if(decision.action == "Move"):
                     fire_event("EntityMove", params=(entity, decision.move))
                 elif(decision.action == "TackleEntity"):
-                    fire_event("EntityTackleEntity", params=(entity, decision.target))  
+                    fire_event("EntityTackleEntity", params=(entity, decision.target)) 
+                elif(decision.action == "Shoot"):
+                    fire_event("EntityShoot", params=entity) 
 
     repeat_events = []
     while(not event_queue.empty()):
@@ -758,9 +767,11 @@ def tick():
 
         elif(e.name == "InitializeLevel"):
             stdscr.clear()
+            _hud_frame_symbol = '#'
+            _hud_frame_attr = 0
             camera_pos = level.player.pos.copy()
 
-        elif(e.name == "TestEvent"):
+        elif(e.name == "TestEventA"):
             for entity in [entity for entity in level.objects if issubclass(type(entity), Entity)]:
                 entity.health = 10
                 entity.armor = 0
@@ -770,20 +781,15 @@ def tick():
             level.player.weapons.append(WeaponManager.CreateWeapon(name="Shotgun"))
             level.player.weapons.append(WeaponManager.CreateWeapon(name="Railgun"))
             level.player.selected_weapon_index = 2
+        
+        elif(e.name == "TestEventB"):
+            sentry = Mercenary(level.player.pos.add(0, 7))
+            sentry.weapons.append(WeaponManager.CreateWeapon(name="EnemyShotgun"))
+            sentry.selected_weapon_index = 0
+            level.objects.append(sentry)
 
         elif(e.name == "PlayerShoot"):
-            selected_weapon = (None if (level.player.selected_weapon_index == -1 or len(level.player.weapons) == 0)
-                                    else level.player.weapons[level.player.selected_weapon_index])
-
-            if selected_weapon is None: continue
-            if selected_weapon.ammo <= 0: continue
-
-            selected_weapon.ammo -= 1
-
-            if selected_weapon.shooting_time_left > 0: continue
-
-            play_sound(selected_weapon.sounds["shoot"][math.floor(random.random() * len(selected_weapon.sounds["shoot"]))])
-            selected_weapon.shoot(level, level.player)
+            fire_event("EntityShoot", params=level.player)
         
         elif(e.name == "PlayerObtainedFlag"):
             play_sound('pickup')
@@ -844,6 +850,19 @@ def tick():
             else:
                 play_sound('kill')
         
+        elif(e.name == "PlayerReload"):
+            fire_event("EntityReload", params=level.player)
+
+        elif(e.name == "EntityReload"):
+            entity: Entity = e.params
+            selected_weapon: BaseWeapon = entity.get_selected_weapon()
+
+            if selected_weapon is None: continue
+            if selected_weapon.reloading > 0 or selected_weapon.reloading_time_left > 0: continue
+
+            play_random_sound(selected_weapon.sounds["reload"])
+            selected_weapon.reload()
+
         elif(e.name == "Defeat"):
             play_sound('death')
             change_gamestate(Gamestate.LOSESCREEN)
@@ -873,6 +892,19 @@ def tick():
             e1, e2 = e.params
             if(e2.invulnerable): return
             fire_event("EntityHurt", params=(e2, max(0, e1.strength)))
+        
+        elif(e.name == "EntityShoot"):
+            entity: Entity = e.params
+            selected_weapon: BaseWeapon = entity.get_selected_weapon()
+
+            if selected_weapon is None: continue
+            if selected_weapon.shooting_time_left > 0: continue
+            if selected_weapon.reloading: continue
+
+            if selected_weapon.shoot(level, entity):
+                play_random_sound(selected_weapon.sounds["shoot"])
+            else:
+                play_sound("weapons/noammo")
     
     for e in repeat_events: refire_event(e)
 

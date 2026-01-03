@@ -163,6 +163,60 @@ class Wall(Solid):
         obj.breakable = data["breakable"]
         return obj
 
+class Spawn(GameObject):
+    def __init__(self, pos: Vector2, symbol: str = "🔅"):
+        GameObject.__init__(self, pos, symbol)
+
+    @staticmethod
+    def from_parent(obj: GameObject) -> "Spawn":
+        return Spawn(pos=obj.pos, symbol=obj.symbol)
+    
+    def serialize(self) -> dict:
+        data = super().serialize()
+        return data
+
+    @staticmethod
+    def deserialize(data: dict) -> "Spawn":
+        obj = Spawn.from_parent(GameObject.deserialize(data))
+        return obj
+
+class Flag(GameObject):
+    def __init__(self, pos: Vector2, symbol: str = "🚩"):
+        GameObject.__init__(self, pos, symbol)
+
+    @staticmethod
+    def from_parent(obj: GameObject) -> "Flag":
+        return Flag(pos=obj.pos, symbol=obj.symbol)
+
+    def serialize(self) -> dict:
+        data = super().serialize()
+        return data
+
+    @staticmethod
+    def deserialize(data: dict) -> "Flag":
+        obj = Flag.from_parent(GameObject.deserialize(data))
+        return obj
+
+class Hazard(Wall):
+    def __init__(self, pos: Vector2, symbol: str = "❌", background: bool = False, breakable: bool = False, damage: int = 1):
+        GameObject.__init__(self, pos, symbol)
+        self.damage = damage
+
+    @staticmethod
+    def from_parent(obj: Wall) -> "Hazard":
+        return Hazard(pos=obj.pos, symbol=obj.symbol, background=obj.background, breakable=obj.breakable)
+    
+    def serialize(self) -> dict:
+        data = super().serialize()
+        data["damage"] = self.damage
+        return data
+
+    @staticmethod
+    def deserialize(data: dict) -> "Hazard":
+        obj = Hazard.from_parent(Wall.deserialize(data))
+        obj.damage = data["damage"]
+        return obj
+
 class Label(GameObject):
     def __init__(self, pos: Vector2, text: str = "Label", text_attr: int = 0):
         GameObject.__init__(self, pos, 'L')
@@ -206,6 +260,13 @@ class Entity(GameObject):
     def direction(self, value: Vector2F):
         if not type(value) is Vector2F: raise Exception("Entity direction set incorrectly")
         self._direction = value
+    
+    def look_at(self, target: Vector2):
+        self._direction = Vector2F.from_Vector2(target.add(-self.pos.y, -self.pos.x))
+    
+    def get_selected_weapon(self):
+        return (None if (self.selected_weapon_index == -1 or len(self.weapons) == 0)
+                     else self.weapons[self.selected_weapon_index])
 
     @staticmethod
     def from_parent(obj: GameObject) -> "Entity":
@@ -261,66 +322,6 @@ class Player(Entity):
         obj.dash_speed = data["dash_speed"]
         obj.dash_cooldown = data["dash_cooldown"]
         obj.has_flag = data["has_flag"]
-        return obj
-
-class Spawn(GameObject):
-    def __init__(self, pos: Vector2, symbol: str = "🔅"):
-        GameObject.__init__(self, pos, symbol)
-
-    @staticmethod
-    def from_parent(obj: GameObject) -> "Spawn":
-        return Spawn(pos=obj.pos, symbol=obj.symbol)
-    
-    def serialize(self) -> dict:
-        data = super().serialize()
-        return data
-
-    @staticmethod
-    def deserialize(data: dict) -> "Spawn":
-        obj = Spawn.from_parent(GameObject.deserialize(data))
-        return obj
-
-class Flag(GameObject):
-    def __init__(self, pos: Vector2, symbol: str = "🚩"):
-        GameObject.__init__(self, pos, symbol)
-
-    @staticmethod
-    def from_parent(obj: GameObject) -> "Flag":
-        return Flag(pos=obj.pos, symbol=obj.symbol)
-
-    def serialize(self) -> dict:
-        data = super().serialize()
-        return data
-
-    @staticmethod
-    def deserialize(data: dict) -> "Flag":
-        obj = Flag.from_parent(GameObject.deserialize(data))
-        return obj
-
-class Hazard(GameObject):
-    def __init__(self, pos: Vector2, symbol: str = "❌", background: bool = False, breakable: bool = False, damage: int = 1):
-        GameObject.__init__(self, pos, symbol)
-        self.background = background
-        self.breakable = breakable
-        self.damage = damage
-
-    @staticmethod
-    def from_parent(obj: GameObject) -> "Hazard":
-        return Hazard(pos=obj.pos, symbol=obj.symbol)
-    
-    def serialize(self) -> dict:
-        data = super().serialize()
-        data["background"] = self.background
-        data["breakable"] = self.breakable
-        data["damage"] = self.damage
-        return data
-
-    @staticmethod
-    def deserialize(data: dict) -> "Hazard":
-        obj = Hazard.from_parent(GameObject.deserialize(data))
-        obj.background = data["background"]
-        obj.breakable = data["breakable"]
-        obj.damage = data["damage"]
         return obj
 
 class Projectile(GameObject):

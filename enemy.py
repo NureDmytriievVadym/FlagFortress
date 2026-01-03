@@ -16,9 +16,6 @@ class Enemy(Entity):
         self.speed_random_deviation = 0.25
         self.ai_disabled = False
         self.think_cooldown = 0
-    
-    @property
-    def type(self): return "Enemy"
 
     @staticmethod
     def from_parent(obj: Entity) -> "Enemy":
@@ -109,13 +106,44 @@ def astar_next_move(start: Vector2, goal: Vector2, level: GameLevel):
 
     return None  # no path
 
+def raytrace(start: Vector2, end: Vector2, objects: list[GameObject]) -> bool:
+    x0, y0 = start.x, start.y
+    x1, y1 = end.x, end.y
+
+    dx = abs(x1 - x0)
+    dy = abs(y1 - y0)
+
+    sx = 1 if x0 < x1 else -1
+    sy = 1 if y0 < y1 else -1
+
+    err = dx - dy
+
+    x, y = x0, y0
+
+    while True:
+        pos = Vector2(y, x)
+
+        for o in objects:
+            if o.deleted: continue
+            if o.pos == pos and issubclass(type(o), Solid): return False
+
+        if x == x1 and y == y1:
+            return True
+
+        e2 = 2 * err
+        if e2 > -dy:
+            err -= dy
+            x += sx
+        if e2 < dx:
+            err += dx
+            y += sy
+
+
 class Ghost(Enemy):
     def __init__(self, pos: Vector2, symbol: str = "👻"):
         Enemy.__init__(self, pos, symbol)
+        self.health = 3
         self.strength = 1
-    
-    @property
-    def type(self): return "Ghost"
 
     @staticmethod
     def from_parent(obj: Enemy) -> "Ghost":
@@ -143,6 +171,84 @@ class Ghost(Enemy):
             self.think_cooldown = 2
             return EnemyAction("TackleEntity", target=level.player)
 
+        self.look_at(level.player.pos)
         move = astar_next_move(self.pos, level.player.pos, level)
         if not move is None: return EnemyAction("Move", move=Vector2(move.y - self.pos.y, move.x - self.pos.x))
-        else: return EnemyAction("Idle")
+        
+        return None
+
+class Sentry(Enemy):
+    def __init__(self, pos: Vector2, symbol: str = "🔭"):
+        Enemy.__init__(self, pos, symbol)
+        self.health = 10
+
+    @staticmethod
+    def from_parent(obj: Enemy) -> "Ghost":
+        return Ghost(pos=obj.pos, symbol=obj.symbol)
+    
+    def serialize(self) -> dict:
+        data = super().serialize()
+        data["strength"] = self.strength
+        return data
+
+    @staticmethod
+    def deserialize(data: dict) -> "Ghost":
+        obj = Ghost.from_parent(Enemy.deserialize(data))
+        obj.strength = data["strength"]
+        return obj
+
+    def think(self, level: GameLevel, deltatime: float) -> EnemyAction:
+        self.think_cooldown -= deltatime
+        if(self.think_cooldown > 0): return None
+        self.think_cooldown = 1.0 / self.speed + (random.random() - 0.5) * 2 * self.speed_random_deviation
+
+        if(self.get_selected_weapon() == None): return None
+        if(raytrace(self.pos, level.player.pos, level.objects)):
+            self.look_at(level.player.pos)
+            return EnemyAction("Shoot")
+
+        return None
+
+class Mercenary(Enemy):
+    def __init__(self, pos: Vector2, symbol: str = "🥷"):
+        Enemy.__init__(self, pos, symbol)
+        self.health = 6
+        self.armor = 4
+        self.speed = 2
+        self.strength = 1
+
+    @staticmethod
+    def from_parent(obj: Enemy) -> "Mercenary":
+        return Mercenary(pos=obj.pos, symbol=obj.symbol)
+    
+    def serialize(self) -> dict:
+        data = super().serialize()
+        data["strength"] = self.strength
+        return data
+
+    @staticmethod
+    def deserialize(data: dict) -> "Ghost":
+        obj = Ghost.from_parent(Enemy.deserialize(data))
+        obj.strength = data["strength"]
+        return obj
+
+    def think(self, level: GameLevel, deltatime: float) -> EnemyAction:
+        self.think_cooldown -= deltatime
+
+        if(self.think_cooldown > 0): return None
+        
+        self.think_cooldown = 1.0 / self.speed + (random.random() - 0.5) * 2 * self.speed_random_deviation
+
+        if(manhattan_distance(self.pos, level.player.pos) <= 1):
+            self.think_cooldown = 2
+            return EnemyAction("TackleEntity", target=level.player)
+        
+        self.look_at(level.player.pos)
+        if random.random() < 0.5 or not raytrace(self.pos, level.player.pos, level.objects):
+            move = astar_next_move(self.pos, level.player.pos, level)
+            if not move is None: return EnemyAction("Move", move=Vector2(move.y - self.pos.y, move.x - self.pos.x))
+        else:
+            if(self.get_selected_weapon().ammo == 0): return EnemyAction("Reload")
+            else: return EnemyAction("Shoot")
+        
+        return None
