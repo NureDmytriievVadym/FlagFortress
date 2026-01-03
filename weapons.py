@@ -185,12 +185,13 @@ class Railgun(BaseWeapon):
         self.ammo_reserve -= ammo_to_load
 
     def shoot(self, level: GameLevel, shooter: Entity) -> bool:
-        bullet_count = 20
+        bullet_count = 30
         for i in range(bullet_count):
             bullet = Bullet(shooter.pos.copy(), shooter.direction, shooter)
             bullet.speed = 20 + i * 20
             bullet.lifetime = 0.1
             bullet.pierce = -1
+            bullet.damage = 5 if i == bullet_count-1 else 0 # only one bullet is real
             level.add_object(bullet)
         self.shooting_time_left = 1.0 / self.firerate
         self.reload()

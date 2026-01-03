@@ -496,7 +496,7 @@ def on_collide(a: GameObject, b: GameObject):
         if b.pierce != -1:
             b.pierce -= 1
             if b.pierce < 0: level.delete_object(b)
-        return True
+        return False
 
     elif issubclass(type(a), Bullet) and issubclass(type(b), Wall):
         if(a.wallbang != -1):
@@ -761,6 +761,10 @@ def tick():
             camera_pos = level.player.pos.copy()
 
         elif(e.name == "TestEvent"):
+            for entity in [entity for entity in level.objects if issubclass(type(entity), Entity)]:
+                entity.health = 10
+                entity.armor = 0
+
             level.player.health = 100
             level.player.armor = 100
             level.player.weapons.append(WeaponManager.CreateWeapon(name="Shotgun"))
