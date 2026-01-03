@@ -3,19 +3,15 @@ from enemy import *
 
 BUILTIN_LEVELS = [
     GameLevel(
-        num = 1,
         name = "Flag",
-        starting_ammo = 3,
         objects = [
             Spawn(Vector2(5, 5)),
             Flag(Vector2(5, 14)),
-            Label(Vector2(2, 2), "Use the arrow keys to move around\nGet the flag and bring it back to spawn to win")
+            Label(Vector2(2, 2), text="Use the arrow keys to move around\nGet the flag and bring it back to spawn to win")
         ]
     ),
     GameLevel(
-        num = 2,
         name = "Walls",
-        starting_ammo = 2,
         objects = [
             Spawn(Vector2(5, 5)),
             Flag(Vector2(5, 14)),
@@ -29,9 +25,7 @@ BUILTIN_LEVELS = [
         ]
     ),
     GameLevel(
-        num = 3,
         name = "Breakable walls",
-        starting_ammo = 3,
         objects = [
             Spawn(Vector2(5, 5)),
             Flag(Vector2(5, 14)),
@@ -54,9 +48,7 @@ BUILTIN_LEVELS = [
         ]
     ),
     GameLevel(
-        num = 4,
         name = "A Ghost!",
-        starting_ammo = 3,
         objects = [
             Spawn(Vector2(5, 5)),
             Flag(Vector2(5, 18)),

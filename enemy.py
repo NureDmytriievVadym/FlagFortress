@@ -6,18 +6,37 @@ class EnemyAction:
         self.action = action
         self.move = move
 
-class Enemy(GameObject):
+class Enemy(Entity):
     def __init__(self, pos: Vector2, symbol: str = "🤖"):
-        GameObject.__init__(self, pos, symbol)
-        self.health = 1
+        Entity.__init__(self, pos, symbol)
         self.speed = 1
         self.speed_random_deviation = 0.25
-        self.invulnerable = False
         self.ai_disabled = False
         self.think_cooldown = 0
     
     @property
     def type(self): return "Enemy"
+
+    @staticmethod
+    def from_parent(obj: Entity) -> "Enemy":
+        return Enemy(pos=obj.pos, symbol=obj.symbol)
+    
+    def serialize(self) -> dict:
+        data = super().serialize()
+        data["speed"] = self.speed
+        data["speed_random_deviation"] = self.speed_random_deviation
+        data["ai_disabled"] = self.ai_disabled
+        data["think_cooldown"] = self.think_cooldown
+        return data
+
+    @staticmethod
+    def deserialize(data: dict) -> "Enemy":
+        obj = Enemy.from_parent(Entity.deserialize(data))
+        obj.speed = data["speed"]
+        obj.speed_random_deviation = data["speed_random_deviation"]
+        obj.ai_disabled = data["ai_disabled"]
+        obj.think_cooldown = data["think_cooldown"]
+        return obj
 
     def think(self, level: GameLevel, deltatime: float) -> EnemyAction:
         self.think_cooldown -= deltatime
@@ -94,6 +113,21 @@ class Ghost(Enemy):
     
     @property
     def type(self): return "Ghost"
+
+    @staticmethod
+    def from_parent(obj: Enemy) -> "Ghost":
+        return Ghost(pos=obj.pos, symbol=obj.symbol)
+    
+    def serialize(self) -> dict:
+        data = super().serialize()
+        data["strength"] = self.strength
+        return data
+
+    @staticmethod
+    def deserialize(data: dict) -> "Ghost":
+        obj = Ghost.from_parent(Enemy.deserialize(data))
+        obj.strength = data["strength"]
+        return obj
 
     def think(self, level: GameLevel, deltatime: float) -> EnemyAction:
         self.think_cooldown -= deltatime

@@ -6,15 +6,17 @@
 """
 
 import curses
+import os
 import time
 import queue
 import math
 import config
 import pygame
 from enum import Enum
-from levels_builtin import BUILTIN_LEVELS, BUILTIN_LEVELS_COUNT
 from models import *
 from enemy import *
+from weapons import *
+import level_sideloading
 
 _sound_cache = {}
 _quit: bool = False
@@ -34,6 +36,9 @@ class Gamestate(Enum):
 _gamestate: Gamestate = Gamestate.MAIN_MENU
 _options_saved_volume = config.VOLUME
 stdscr = None
+
+BUILTIN_LEVELS_SERIAL = bytearray(b"FF01LC\x00\x00\x00\x04\x00\x00\x06\x88//57ACIAbgBhAG0AZQAiADoAIAAiAEYAbABhAGcAIgAsACAAIgBhAHUAdABoAG8AcgAiADoAIAAiAFYAYQBkAHkAbQBEAG0AeQB0AHIAaQBpAGUAdgAiACwAIAAiAGQAZQBzAGMAcgBpAHAAdABpAG8AbgAiADoAIAAiAEIAdQBpAGwAdAAtAGkAbgAgAGwAZQB2AGUAbAAiACwAIAAiAHMAdABhAHIAdABpAG4AZwBfAHcAZQBhAHAAbwBuAF8AbgBhAG0AZQAiADoAIAAiAFAAaQBzAHQAbwBsACIALAAgACIAcwB0AGEAcgB0AGkAbgBnAF8AdwBlAGEAcABvAG4AXwBhAG0AbQBvACIAOgAgADQALAAgACIAcwB0AGEAcgB0AGkAbgBnAF8AdwBlAGEAcABvAG4AXwBhAG0AbQBvAF8AcgBlAHMAZQByAHYAZQAiADoAIAA0ACwAIAAiAHMAdABhAHIAdABpAG4AZwBfAGgAZQBhAGwAdABoACIAOgAgADQALAAgACIAcwB0AGEAcgB0AGkAbgBnAF8AYQByAG0AbwByACIAOgAgADAALAAgACIAbwBiAGoAZQBjAHQAcwAiADoAIABbAHsAIgB0AHkAcABlACIAOgAgACIAUwBwAGEAdwBuACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAANQAsACAAIgB4ACIAOgAgADUAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQBkADgAMwBkAFwAdQBkAGQAMAA1ACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIARgBsAGEAZwAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADUALAAgACIAeAAiADoAIAAxADQAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQBkADgAMwBkAFwAdQBkAGUAYQA5ACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIATABhAGIAZQBsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAAMgAsACAAIgB4ACIAOgAgADIAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAEwAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgAC0AMQAsACAAIgB0AGUAeAB0ACIAOgAgACIAVQBzAGUAIAB0AGgAZQAgAGEAcgByAG8AdwAgAGsAZQB5AHMAIAB0AG8AIABtAG8AdgBlACAAYQByAG8AdQBuAGQAXABuAEcAZQB0ACAAdABoAGUAIABmAGwAYQBnACAAYQBuAGQAIABiAHIAaQBuAGcAIABpAHQAIABiAGEAYwBrACAAdABvACAAcwBwAGEAdwBuACAAdABvACAAdwBpAG4AIgAsACAAIgB0AGUAeAB0AF8AYQB0AHQAcgAiADoAIAAwAH0AXQB9AA==\x00\x00\x00\x0c\xb8//57ACIAbgBhAG0AZQAiADoAIAAiAFcAYQBsAGwAcwAiACwAIAAiAGEAdQB0AGgAbwByACIAOgAgACIAVgBhAGQAeQBtAEQAbQB5AHQAcgBpAGkAZQB2ACIALAAgACIAZABlAHMAYwByAGkAcAB0AGkAbwBuACIAOgAgACIAQgB1AGkAbAB0AC0AaQBuACAAbABlAHYAZQBsACIALAAgACIAcwB0AGEAcgB0AGkAbgBnAF8AdwBlAGEAcABvAG4AXwBuAGEAbQBlACIAOgAgACIAUABpAHMAdABvAGwAIgAsACAAIgBzAHQAYQByAHQAaQBuAGcAXwB3AGUAYQBwAG8AbgBfAGEAbQBtAG8AIgA6ACAANAAsACAAIgBzAHQAYQByAHQAaQBuAGcAXwB3AGUAYQBwAG8AbgBfAGEAbQBtAG8AXwByAGUAcwBlAHIAdgBlACIAOgAgADQALAAgACIAcwB0AGEAcgB0AGkAbgBnAF8AaABlAGEAbAB0AGgAIgA6ACAANAAsACAAIgBzAHQAYQByAHQAaQBuAGcAXwBhAHIAbQBvAHIAIgA6ACAAMAAsACAAIgBvAGIAagBlAGMAdABzACIAOgAgAFsAewAiAHQAeQBwAGUAIgA6ACAAIgBTAHAAYQB3AG4AIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA1ACwAIAAiAHgAIgA6ACAANQB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1AGQAOAAzAGQAXAB1AGQAZAAwADUAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBGAGwAYQBnACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAANQAsACAAIgB4ACIAOgAgADEANAB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1AGQAOAAzAGQAXAB1AGQAZQBhADkAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAAMgAsACAAIgB4ACIAOgAgADEAMAB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIAYgAxAGIAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADMALAAgACIAeAAiADoAIAAxADAAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyAGIAMQBiACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAGYAYQBsAHMAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA0ACwAIAAiAHgAIgA6ACAAMQAwAH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgBiADEAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIABmAGEAbABzAGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAANQAsACAAIgB4ACIAOgAgADEAMAB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIAYgAxAGIAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADYALAAgACIAeAAiADoAIAAxADAAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyAGIAMQBiACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAGYAYQBsAHMAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA3ACwAIAAiAHgAIgA6ACAAMQAwAH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgBiADEAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIABmAGEAbABzAGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAAOAAsACAAIgB4ACIAOgAgADEAMAB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIAYgAxAGIAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlAH0AXQB9AA==\x00\x00\x00\x17`//57ACIAbgBhAG0AZQAiADoAIAAiAEIAcgBlAGEAawBhAGIAbABlACAAdwBhAGwAbABzACIALAAgACIAYQB1AHQAaABvAHIAIgA6ACAAIgBWAGEAZAB5AG0ARABtAHkAdAByAGkAaQBlAHYAIgAsACAAIgBkAGUAcwBjAHIAaQBwAHQAaQBvAG4AIgA6ACAAIgBCAHUAaQBsAHQALQBpAG4AIABsAGUAdgBlAGwAIgAsACAAIgBzAHQAYQByAHQAaQBuAGcAXwB3AGUAYQBwAG8AbgBfAG4AYQBtAGUAIgA6ACAAIgBQAGkAcwB0AG8AbAAiACwAIAAiAHMAdABhAHIAdABpAG4AZwBfAHcAZQBhAHAAbwBuAF8AYQBtAG0AbwAiADoAIAA0ACwAIAAiAHMAdABhAHIAdABpAG4AZwBfAHcAZQBhAHAAbwBuAF8AYQBtAG0AbwBfAHIAZQBzAGUAcgB2AGUAIgA6ACAANAAsACAAIgBzAHQAYQByAHQAaQBuAGcAXwBoAGUAYQBsAHQAaAAiADoAIAA0ACwAIAAiAHMAdABhAHIAdABpAG4AZwBfAGEAcgBtAG8AcgAiADoAIAAwACwAIAAiAG8AYgBqAGUAYwB0AHMAIgA6ACAAWwB7ACIAdAB5AHAAZQAiADoAIAAiAFMAcABhAHcAbgAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADUALAAgACIAeAAiADoAIAA1AH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAZAA4ADMAZABcAHUAZABkADAANQAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAEYAbABhAGcAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA1ACwAIAAiAHgAIgA6ACAAMQA0AH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAZAA4ADMAZABcAHUAZABlAGEAOQAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAAzACwAIAAiAHgAIgA6ACAAMQAyAH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgBiADEAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIABmAGEAbABzAGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAAMwAsACAAIgB4ACIAOgAgADEAMwB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIAYgAxAGIAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADMALAAgACIAeAAiADoAIAAxADQAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyAGIAMQBiACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAGYAYQBsAHMAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAAzACwAIAAiAHgAIgA6ACAAMQA1AH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgBiADEAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIABmAGEAbABzAGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAAMwAsACAAIgB4ACIAOgAgADEANgB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIAYgAxAGIAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADcALAAgACIAeAAiADoAIAAxADIAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyAGIAMQBiACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAGYAYQBsAHMAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA3ACwAIAAiAHgAIgA6ACAAMQAzAH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgBiADEAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIABmAGEAbABzAGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAANwAsACAAIgB4ACIAOgAgADEANAB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIAYgAxAGIAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADcALAAgACIAeAAiADoAIAAxADUAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyAGIAMQBiACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAGYAYQBsAHMAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA3ACwAIAAiAHgAIgA6ACAAMQA2AH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgBiADEAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIABmAGEAbABzAGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAANAAsACAAIgB4ACIAOgAgADEANgB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIAYgAxAGIAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADUALAAgACIAeAAiADoAIAAxADYAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyAGIAMQBiACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAGYAYQBsAHMAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA2ACwAIAAiAHgAIgA6ACAAMQA2AH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgBiADEAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIABmAGEAbABzAGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAANAAsACAAIgB4ACIAOgAgADEAMgB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIANQBmAGUAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAdAByAHUAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA1ACwAIAAiAHgAIgA6ACAAMQAyAH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgA1AGYAZQAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIAB0AHIAdQBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADYALAAgACIAeAAiADoAIAAxADIAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyADUAZgBlACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAHQAcgB1AGUAfQBdAH0A\x00\x00\x00\'\x98//57ACIAbgBhAG0AZQAiADoAIAAiAEEAIABHAGgAbwBzAHQAIQAiACwAIAAiAGEAdQB0AGgAbwByACIAOgAgACIAVgBhAGQAeQBtAEQAbQB5AHQAcgBpAGkAZQB2ACIALAAgACIAZABlAHMAYwByAGkAcAB0AGkAbwBuACIAOgAgACIAQgB1AGkAbAB0AC0AaQBuACAAbABlAHYAZQBsACIALAAgACIAcwB0AGEAcgB0AGkAbgBnAF8AdwBlAGEAcABvAG4AXwBuAGEAbQBlACIAOgAgACIAUABpAHMAdABvAGwAIgAsACAAIgBzAHQAYQByAHQAaQBuAGcAXwB3AGUAYQBwAG8AbgBfAGEAbQBtAG8AIgA6ACAANAAsACAAIgBzAHQAYQByAHQAaQBuAGcAXwB3AGUAYQBwAG8AbgBfAGEAbQBtAG8AXwByAGUAcwBlAHIAdgBlACIAOgAgADQALAAgACIAcwB0AGEAcgB0AGkAbgBnAF8AaABlAGEAbAB0AGgAIgA6ACAANAAsACAAIgBzAHQAYQByAHQAaQBuAGcAXwBhAHIAbQBvAHIAIgA6ACAAMAAsACAAIgBvAGIAagBlAGMAdABzACIAOgAgAFsAewAiAHQAeQBwAGUAIgA6ACAAIgBTAHAAYQB3AG4AIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA1ACwAIAAiAHgAIgA6ACAANQB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1AGQAOAAzAGQAXAB1AGQAZAAwADUAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBGAGwAYQBnACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAANQAsACAAIgB4ACIAOgAgADEAOAB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1AGQAOAAzAGQAXAB1AGQAZQBhADkAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBHAGgAbwBzAHQAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA1ACwAIAAiAHgAIgA6ACAAMQA0AH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAZAA4ADMAZABcAHUAZABjADcAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBoAGUAYQBsAHQAaAAiADoAIAAzACwAIAAiAGEAcgBtAG8AcgAiADoAIAAwACwAIAAiAGQAaQByAGUAYwB0AGkAbwBuACIAOgAgAHsAIgB5ACIAOgAgADAALAAgACIAeAAiADoAIAAxAH0ALAAgACIAaQBuAHYAdQBsAG4AZQByAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlACwAIAAiAHMAZQBsAGUAYwB0AGUAZABfAHcAZQBhAHAAbwBuAF8AaQBuAGQAZQB4ACIAOgAgADAALAAgACIAdwBlAGEAcABvAG4AcwAiADoAIABbAF0ALAAgACIAcwBwAGUAZQBkACIAOgAgADEALAAgACIAcwBwAGUAZQBkAF8AcgBhAG4AZABvAG0AXwBkAGUAdgBpAGEAdABpAG8AbgAiADoAIAAwAC4AMgA1ACwAIAAiAGEAaQBfAGQAaQBzAGEAYgBsAGUAZAAiADoAIABmAGEAbABzAGUALAAgACIAdABoAGkAbgBrAF8AYwBvAG8AbABkAG8AdwBuACIAOgAgADAALAAgACIAcwB0AHIAZQBuAGcAdABoACIAOgAgADEAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAAMwAsACAAIgB4ACIAOgAgADEAMgB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIAYgAxAGIAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADMALAAgACIAeAAiADoAIAAxADMAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyAGIAMQBiACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAGYAYQBsAHMAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAAzACwAIAAiAHgAIgA6ACAAMQA0AH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgBiADEAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIABmAGEAbABzAGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAAMwAsACAAIgB4ACIAOgAgADEANQB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIAYgAxAGIAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADMALAAgACIAeAAiADoAIAAxADYAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyAGIAMQBiACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAGYAYQBsAHMAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAAzACwAIAAiAHgAIgA6ACAAMQA3AH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgBiADEAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIABmAGEAbABzAGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAAMwAsACAAIgB4ACIAOgAgADEAOAB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIAYgAxAGIAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADMALAAgACIAeAAiADoAIAAxADkAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyAGIAMQBiACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAGYAYQBsAHMAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAAzACwAIAAiAHgAIgA6ACAAMgAwAH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgBiADEAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIABmAGEAbABzAGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAANwAsACAAIgB4ACIAOgAgADEAMgB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIAYgAxAGIAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADcALAAgACIAeAAiADoAIAAxADMAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyAGIAMQBiACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAGYAYQBsAHMAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA3ACwAIAAiAHgAIgA6ACAAMQA0AH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgBiADEAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIABmAGEAbABzAGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAANwAsACAAIgB4ACIAOgAgADEANQB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIAYgAxAGIAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADcALAAgACIAeAAiADoAIAAxADYAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyAGIAMQBiACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAGYAYQBsAHMAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA3ACwAIAAiAHgAIgA6ACAAMQA3AH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgBiADEAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIABmAGEAbABzAGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAANwAsACAAIgB4ACIAOgAgADEAOAB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIAYgAxAGIAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADcALAAgACIAeAAiADoAIAAxADkAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyAGIAMQBiACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAGYAYQBsAHMAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA3ACwAIAAiAHgAIgA6ACAAMgAwAH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgBiADEAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIABmAGEAbABzAGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAANAAsACAAIgB4ACIAOgAgADIAMAB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIAYgAxAGIAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADUALAAgACIAeAAiADoAIAAyADAAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyAGIAMQBiACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAGYAYQBsAHMAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA2ACwAIAAiAHgAIgA6ACAAMgAwAH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgBiADEAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIABmAGEAbABzAGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAANAAsACAAIgB4ACIAOgAgADEAMgB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIANQBmAGUAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAdAByAHUAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA1ACwAIAAiAHgAIgA6ACAAMQAyAH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgA1AGYAZQAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIAB0AHIAdQBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADYALAAgACIAeAAiADoAIAAxADIAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyADUAZgBlACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAHQAcgB1AGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAANAAsACAAIgB4ACIAOgAgADEANgB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIANQBmAGUAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAdAByAHUAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA1ACwAIAAiAHgAIgA6ACAAMQA2AH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgA1AGYAZQAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIAB0AHIAdQBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADYALAAgACIAeAAiADoAIAAxADYAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyADUAZgBlACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAHQAcgB1AGUAfQBdAH0A\x00")
+BUILTIN_LEVELS: list[GameLevel] = []
 
 MENUS = {
     "MainMenu": Menu(Vector2(16, 48), "FlagFortress", "Capture the Flag in your terminal!", [
@@ -88,8 +93,8 @@ MENUS = {
 }
 
 menu: Menu = None
+campaign_level: int = 0
 level: GameLevel = None
-last_move = Vector2(0, 0)
 event_queue = queue.SimpleQueue()
 saved_gamestate: Gamestate = Gamestate.INGAME
 saved_events = []
@@ -106,20 +111,17 @@ def load_sound(snd: str):
     global _sound_cache
     _sound_cache[snd] = pygame.mixer.Sound(f"snd/{snd}.wav")
 
-def load_sounds():
-    load_sound("dash")
-    load_sound("death")
-    load_sound("explosion")
-    load_sound("hurt")
-    load_sound("level_complete")
-    load_sound("pickup")
-    load_sound("rg_reloaded")
-    load_sound("rg_shoot_a")
-    load_sound("rg_shoot_b")
-    load_sound("rl_shoot")
-    load_sound("select")
-    load_sound("shoot")
-    load_sound("victory")
+def load_sounds(root: str = "snd"):
+    global _sound_cache
+    for dirpath, _, filenames in os.walk(root):
+        for name in filenames:
+            if not name.lower().endswith(".wav"):
+                continue
+
+            full_path = os.path.join(dirpath, name)
+            key = os.path.relpath(full_path, root)[:-4]  # remove ".wav"
+
+            _sound_cache[key] = pygame.mixer.Sound(full_path)
 
 def play_sound(snd: str):
     _sound_cache[snd].set_volume(math.sqrt(config.VOLUME / 100.0))
@@ -142,7 +144,6 @@ def refire_event(e: Event):
 
 def handle_input():
     global stdscr
-    global last_move
     c = ""
     try:
         c = stdscr.getkey()
@@ -154,49 +155,35 @@ def handle_input():
     
     if(_gamestate == Gamestate.INGAME or
        _gamestate == Gamestate.INGAME_CUSTOM):
-        if(c == "KEY_LEFT"):
-            fire_event("PlayerMove", params = Vector2(0, -1))
-            last_move = Vector2(0, -1)
-        elif(c == "KEY_RIGHT"):
-            fire_event("PlayerMove", params = Vector2(0, 1))
-            last_move = Vector2(0, 1)
-        elif(c == "KEY_UP"):
-            fire_event("PlayerMove", params = Vector2(-1, 0))
-            last_move = Vector2(-1, 0)
-        elif(c == "KEY_DOWN"):
-            fire_event("PlayerMove", params = Vector2(1, 0))
-            last_move = Vector2(1, 0)
-        elif(c.lower() == "m"):
-            fire_event("ToMainMenu")
-        elif(c.lower() == "c"):
-            fire_event("PlayerDash", params = last_move.mul(3))
-        elif(c.lower() == "f"):
-            fire_event("Shoot")
-        elif(c.lower() == "k" and config.DEBUG):
-            fire_event("PlayerHurt", params = 1)
-        elif(c.lower() == "p"):
-            fire_event("Pause")
+        if(c == "KEY_LEFT"): fire_event("PlayerMove", params = Vector2(0, -1))
+        elif(c == "KEY_RIGHT"): fire_event("PlayerMove", params = Vector2(0, 1))
+        elif(c == "KEY_UP"): fire_event("PlayerMove", params = Vector2(-1, 0))
+        elif(c == "KEY_DOWN"): fire_event("PlayerMove", params = Vector2(1, 0))
+        elif(c.lower() == "m"): fire_event("ToMainMenu")
+        elif(c.lower() == "c"): fire_event("PlayerDash")
+        elif(c.lower() == "f"): fire_event("PlayerShoot")
+        elif(c.lower() == "k" and config.DEBUG): fire_event("PlayerHurt", params = 1)
+        elif(c.lower() == "p"): fire_event("Pause")
     elif(_gamestate == Gamestate.MAIN_MENU or
          _gamestate == Gamestate.INGAME_PAUSED or
          _gamestate == Gamestate.OPTIONS):
-        if(c == "KEY_UP"):
-            fire_event("MoveMenuOption", params = -1)
-        elif(c == "KEY_DOWN"):
-            fire_event("MoveMenuOption", params = 1)
-        elif(c == "KEY_LEFT"):
-            fire_event("BackOption", params = -1)
-        elif(c == "KEY_RIGHT"):
-            fire_event("SelectMenuOption")
-
-def load_level_builtin(num: int):
-    load_level(BUILTIN_LEVELS[num-1])
+        if(c == "KEY_UP"): fire_event("MoveMenuOption", params = -1)
+        elif(c == "KEY_DOWN"): fire_event("MoveMenuOption", params = 1)
+        elif(c == "KEY_LEFT"): fire_event("BackOption", params = -1)
+        elif(c == "KEY_RIGHT"): fire_event("SelectMenuOption")
 
 def load_level(lvl: GameLevel):
     global level
     level = lvl
     level.player = Player(level.spawn.pos.copy())
     level.add_object(level.player)
-    level.player.ammo_left = level.starting_ammo
+    if not level.starting_weapon_name == "":
+        wep: BaseWeapon = WeaponManager.CreateWeapon(name=level.starting_weapon_name)
+        wep.ammo = level.starting_weapon_ammo
+        wep.ammo_reserve = level.starting_weapon_ammo_reserve
+        level.player.weapons.append(wep)
+        level.player.selected_weapon_index = 0
+
     fire_event("InitializeLevel")
 
 def get_fps():
@@ -210,8 +197,8 @@ def render_hud():
     if(level is None or level.player is None): return
     stdscr.addstr(2, 3, "C - Dash | F - Shoot | P - Pause")
     stdscr.addstr(4, 3, f"HP: {level.player.health}")
-    stdscr.addstr(5, 3, f"Ammo left: {level.player.ammo_left}")
-    stdscr.addstr(7, 3, f"Level: {level.name} (#{level.num})")
+    #stdscr.addstr(5, 3, f"Ammo left: {level.player.ammo_left}")
+    stdscr.addstr(7, 3, f"Level: {level.name}")
     stdscr.addstr(8, 3, "Get the flag and bring it back to spawn")
 
 def render_debug():
@@ -318,7 +305,15 @@ def render_ingame_matrix():
             continue
 
         if((not 0 <= obj.pos.y <= config.LEVEL_HEIGHT) or (not 0 <= obj.pos.x <= config.LEVEL_WIDTH)): continue
-        render_matrix[obj.pos.y][obj.pos.x*2] = obj.symbol
+
+        if(issubclass(type(obj), Projectile)):
+            sp = round(obj.subpos.x)
+            if 0 <= obj.pos.x*2 + sp <= config.LEVEL_WIDTH*2+1:
+                if render_matrix[obj.pos.y][obj.pos.x*2 + sp] == '' or ord(render_matrix[obj.pos.y][obj.pos.x*2]) > 255:
+                    sp = 0
+                render_matrix[obj.pos.y][obj.pos.x*2 + sp] = obj.symbol
+        else:
+            render_matrix[obj.pos.y][obj.pos.x*2] = obj.symbol
         if(ord(obj.symbol) > 255): render_matrix[obj.pos.y][obj.pos.x*2+1] = ''
         else:
             if(render_matrix[obj.pos.y][obj.pos.x*2+1] == ''): render_matrix[obj.pos.y][obj.pos.x*2+1] = AIR
@@ -357,7 +352,7 @@ def on_collide(a: GameObject, b: GameObject):
     if(_gamestate == Gamestate.INGAME_PAUSED): return False
     
     if(a.type == "Player" and b.type == "Flag" and not b.hidden):
-        fire_event("ObtainedFlag")
+        fire_event("PlayerObtainedFlag")
 
     elif(a.type == "Player" and b.type == "Spawn" and level.flag.hidden):
         fire_event("FlagCaptured")
@@ -441,26 +436,17 @@ def change_gamestate(gamestate: Gamestate):
     
     _gamestate = gamestate
 
-def on_level_complete():
-    if(_gamestate == Gamestate.INGAME and level.num == BUILTIN_LEVELS_COUNT):
-        while not event_queue.empty():
-            event_queue.get()
-
-        fire_event("Victory")
-        return
-            
-    load_level_builtin(level.num+1)
-
 def process_menu_action(action: str):
     global _quit
     global _options_saved_volume
     global menu
     if(action == "play_builtin"):
         change_gamestate(Gamestate.INGAME)
-        load_level_builtin(num=1)
+        campaign_level = 0
+        load_level(BUILTIN_LEVELS[campaign_level])
     elif(action == "play_custom"):
         change_gamestate(Gamestate.INGAME_CUSTOM)
-        load_level_builtin(num=4)
+        load_level(BUILTIN_LEVELS[4])
     elif(action == "open_options"):
         change_gamestate(Gamestate.OPTIONS)
         _options_saved_volume = config.VOLUME
@@ -521,13 +507,25 @@ def tick():
     global menu
     global saved_gamestate
     global saved_events
+    global campaign_level
     global _deltatime
 
     if(_gamestate in (Gamestate.INGAME, Gamestate.INGAME_CUSTOM)):
         if(level.player.dash_cooldown > 0):
             level.player.dash_cooldown = max(0, level.player.dash_cooldown - _deltatime)
 
+        for projectile in [projectile for projectile in level.objects if issubclass(type(projectile), Projectile)]:
+            if projectile.deleted: continue
+            projectile.subpos = projectile.subpos.add(projectile.direction.y * projectile.speed * _deltatime, projectile.direction.x * projectile.speed * _deltatime)
+            move = Vector2(math.floor(projectile.subpos.y) if sign(projectile.subpos.y) == 1 else math.ceil(projectile.subpos.y),
+                           math.floor(projectile.subpos.x) if sign(projectile.subpos.x) == 1 else math.ceil(projectile.subpos.x))
+
+            if(move.y != 0 or move.x != 0):
+                projectile.subpos = projectile.subpos.add(-move.y, -move.x)
+                move_object(projectile, move)
+
         for enemy in [enemy for enemy in level.objects if issubclass(type(enemy), Enemy) and not enemy.ai_disabled]:
+            if enemy.deleted: continue
             decision = enemy.think(level, _deltatime)
             if decision is None: continue
             if(decision.action == "Move"):
@@ -560,25 +558,18 @@ def tick():
             stdscr.clear()
             initial_ingame_render()
 
-        elif(e.name == "Shoot"):
-            if(level.player.ammo_left <= 0): continue
+        elif(e.name == "PlayerShoot"):
+            selected_weapon = (None if (level.player.selected_weapon_index == -1 or len(level.player.weapons) == 0)
+                                else level.player.weapons[level.player.selected_weapon_index])
+            
+            if selected_weapon is None: continue
+            if(selected_weapon.ammo <= 0): continue
 
-            level.player.ammo_left -= 1
-            render_hud()
-
+            selected_weapon.ammo -= 1
             play_sound('shoot')
-
-            bullet = PlayerBullet(level.player.pos.copy(), last_move.normal())
-            level.add_object(bullet)
-            fire_event("BulletMove", 0, bullet)
-
-        elif(e.name == "BulletMove"):
-            bullet = e.params
-            if(bullet == None or bullet.deleted): continue
-            move_object(bullet, bullet.direction)
-            fire_event("BulletMove", 1 / bullet.speed, bullet)
+            selected_weapon.shoot(level, level.player)
         
-        elif(e.name == "ObtainedFlag"):
+        elif(e.name == "PlayerObtainedFlag"):
             play_sound('pickup')
             level.flag.hidden = True
         
@@ -602,29 +593,35 @@ def tick():
 
         elif(e.name == "Victory"):
             play_sound('victory')
-            change_gamestate(Gamestate.WINSCREEN)
+            while not event_queue.empty():
+                event_queue.get()
+            
+            campaign_level += 1
+            load_level(BUILTIN_LEVELS[campaign_level])
+            #change_gamestate(Gamestate.WINSCREEN_CAMPAIGN)
         
         elif(e.name == "FlagCaptured"):
-            play_sound('level_complete')
-            fire_event("LevelComplete")
-            on_level_complete()
+            fire_event("Victory")
 
         elif(e.name == "PlayerDash"):
             if (not level.player.has_dash) or level.player.dash_speed == 0: return
             play_sound('dash')
             level.player.dash_cooldown = 1
             level.player.invulnerable = True
-            fire_event("PlayerMove", params = last_move.mul(level.player.dash_speed))
+            fire_event("PlayerMove", params = Vector2.from_Vector2F(level.player.direction.mul(level.player.dash_speed)))
             level.player.invulnerable = False
 
         elif(e.name == "PlayerMove"):
+            level.player.direction = Vector2F.from_Vector2(e.params.normalize())
             move_object(level.player, e.params)
         
         elif(e.name == "PlayerHurt"):
             dmg = e.params
             if(dmg <= 0): continue
             play_sound('hurt')
-            level.player.health -= dmg
+            armor_absorbed_dmg = min(level.player.armor, math.ceil(dmg * 0.66))
+            level.player.health -= dmg - armor_absorbed_dmg
+            level.player.armor -= armor_absorbed_dmg
             render_level_frame('@', curses.color_pair(1))
             fire_event("PlayerHurtFlashOver", delay = 0.2)
             # todo
@@ -639,7 +636,7 @@ def tick():
         elif(e.name == "EnemyTacklePlayer"):
             enemy = e.params
             if(level.player.invulnerable): return
-            fire_event("PlayerHurt", params=max(0, enemy.strength - level.player.defense))
+            fire_event("PlayerHurt", params=max(0, enemy.strength))
     
     for e in repeat_events: refire_event(e)
 
@@ -650,6 +647,7 @@ def main(stdscr_in):
     global _frametime
     global _screensize
     global _deltatime
+    global BUILTIN_LEVELS
     stdscr = stdscr_in
     stdscr.clear()
     stdscr.nodelay(True)
@@ -661,6 +659,7 @@ def main(stdscr_in):
     pygame.mixer.init()
     load_colors()
     load_sounds()
+    BUILTIN_LEVELS = level_sideloading.load_levels(BUILTIN_LEVELS_SERIAL)
 
     last_time = time.time_ns() / (10 ** 9)
     last_tick_time = time.time_ns() / (10 ** 9)
@@ -694,7 +693,5 @@ def main(stdscr_in):
     return 0
 
 retcode = curses.wrapper(main)
-if retcode == 0:
-    print("You won!")
 if retcode == 1:
     print("The console window isn't big enough for the game! Please run the game in a bigger terminal window.")
