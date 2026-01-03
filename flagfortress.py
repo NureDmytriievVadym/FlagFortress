@@ -18,8 +18,9 @@ from enemy import *
 from weapons import *
 import level_sideloading
 
-_sound_cache = {}
+stdscr = None
 _quit: bool = False
+_sound_cache = {}
 _frametime: float = 1
 _frametimes: list[float] = []
 _deltatime: float = 1
@@ -39,7 +40,14 @@ class Gamestate(Enum):
 _gamestate: Gamestate = Gamestate.MAIN_MENU
 _previous_gamestate: Gamestate = Gamestate.MAIN_MENU
 _options_saved_volume = config.VOLUME
-stdscr = None
+menu: Menu = None
+campaign_level: int = 0
+level: GameLevel = None
+level_time: float = 0
+level_score_additive: int = 0
+camera_pos: Vector2 = Vector2(0, 0)
+event_queue = queue.SimpleQueue()
+saved_events = []
 
 HUD_SIZE = Vector2(5, _screensize.x-1)
 _hud_frame_symbol: str = '#'
@@ -160,14 +168,22 @@ MENUS["Options_Volume"].options_offset = Vector2(1, 0)
 MENUS["Losescreen"].options_offset = Vector2(3, 0)
 MENUS["Tutorial"].options_offset = Vector2(10, 0)
 
-menu: Menu = None
-campaign_level: int = 0
-level: GameLevel = None
-level_time: float = 0
-level_score_additive: int = 0
-camera_pos: Vector2 = Vector2(0, 0)
-event_queue = queue.SimpleQueue()
-saved_events = []
+def save_settings():
+    with open("config.py", "w") as f:
+        for key, val in config.__dict__.items():
+            if key.isupper(): f.write(f"{key}={val}\n")
+
+def get_fps():
+    global _frametimes
+    avg_frametime = sum(_frametimes) / (float(len(_frametimes) if len(_frametimes) > 0 else 1))
+    if(avg_frametime == 0): avg_frametime = 1
+    return round(1.0 / avg_frametime)
+
+def get_tps():
+    global _deltatimes
+    avg_deltatime = sum(_deltatimes) / (float(len(_deltatimes) if len(_deltatimes) > 0 else 1))
+    if(avg_deltatime == 0): avg_deltatime = 1
+    return round(1.0 / avg_deltatime)
 
 def load_colors():
     curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_RED)
@@ -202,11 +218,6 @@ def play_random_sound(snds: list[str]):
     selected_sound = snds[math.floor(random.random() * len(snds))]
     _sound_cache[selected_sound].set_volume(math.sqrt(config.VOLUME / 100.0))
     _sound_cache[selected_sound].play()
-
-def save_settings():
-    with open("config.py", "w") as f:
-        for key, val in config.__dict__.items():
-            if key.isupper(): f.write(f"{key}={val}\n")
 
 def fire_event(name: str, delay: float = 0, params: any = []):
     global _lifetime
@@ -282,17 +293,9 @@ def play_level(lvl: GameLevel):
     fire_event("InitializeLevel")
     return True
 
-def get_fps():
-    global _frametimes
-    avg_frametime = sum(_frametimes) / (float(len(_frametimes) if len(_frametimes) > 0 else 1))
-    if(avg_frametime == 0): avg_frametime = 1
-    return round(1.0 / avg_frametime)
-
-def get_tps():
-    global _deltatimes
-    avg_deltatime = sum(_deltatimes) / (float(len(_deltatimes) if len(_deltatimes) > 0 else 1))
-    if(avg_deltatime == 0): avg_deltatime = 1
-    return round(1.0 / avg_deltatime)
+def render_clear():
+    global stdscr
+    stdscr.clear()
 
 def render_fps():
     global _screensize
@@ -493,10 +496,6 @@ def render_ingame_matrix():
     for i in range(len(render_matrix)):
         row = render_matrix[i]
         stdscr.addstr(viewport_pos.y + i, viewport_pos.x, ''.join(row))
-
-def render_clear():
-    global stdscr
-    stdscr.clear()
 
 def render():
     global _gamestate
@@ -751,6 +750,7 @@ def tick():
         if(level.player.dash_cooldown > 0):
             level.player.dash_cooldown = max(0, level.player.dash_cooldown - dt)
 
+        # Process all projectiles (bullets etc)
         for projectile in [projectile for projectile in level.objects if issubclass(type(projectile), Projectile)]:
             if projectile.deleted: continue
             projectile.lifetime -= dt
@@ -765,11 +765,12 @@ def tick():
                 projectile.subpos = projectile.subpos.add(-move.y, -move.x)
                 move_object(projectile, move)
 
+        # Process all entities
         for entity in [entity for entity in level.objects if issubclass(type(entity), Entity)]:
             if entity.deleted: continue
 
+            # Update the selected weapon
             selected_weapon: BaseWeapon = entity.get_selected_weapon()
-
             if not selected_weapon is None:
                 selected_weapon.shooting_time_left = max(0, selected_weapon.shooting_time_left - dt)
                 if selected_weapon.reloading_time_left > 0 and selected_weapon.reloading_time_left - dt <= 0:
@@ -779,7 +780,9 @@ def tick():
                 elif selected_weapon.reloading_time_left > 0:
                     selected_weapon.reloading_time_left -= dt
 
+            # Enemy AI
             if issubclass(type(entity), Enemy):
+                if entity.ai_disabled: continue
                 decision: EnemyAction = entity.think(level, dt)
                 if decision is None: continue
                 if(decision.action == "Move"):
@@ -789,14 +792,22 @@ def tick():
                 elif(decision.action == "Shoot"):
                     fire_event("EntityShoot", params=entity) 
 
+    # Process all queued events
     repeat_events = []
     while(not event_queue.empty()):
+        # delay events until later
         e: Event = event_queue.get()
         if(e.delay > 0):
             repeat_events.append(e)
             e.delay -= 1
             continue
         
+        # =================== MENU EVENTS ===================
+
+        elif(e.name == "BackOption"):
+            process_menu_action("back")
+            play_sound("select")
+
         elif(e.name == "MoveMenuOption"):
             menu.selected_option = min(len(menu.options)-1, max(menu.selected_option + e.params, 0))
             if(menu == MENUS["Options_Volume"]): config.VOLUME = max(0, min(10, 10 - menu.selected_option)) * 10
@@ -805,42 +816,16 @@ def tick():
         elif(e.name == "SelectMenuOption"):
             process_menu_action(menu.options[menu.selected_option][0])
             play_sound("select")
-        
-        elif(e.name == "BackOption"):
-            process_menu_action("back")
-            play_sound("select")
 
-        elif(e.name == "InitializeLevel"):
-            stdscr.clear()
+        elif(e.name == "ToMainMenu"):
+            change_gamestate(Gamestate.MAIN_MENU)
+
+        elif(e.name == "PlayerHurtFlashOver"):
             _hud_frame_symbol = '#'
             _hud_frame_attr = 0
-            camera_pos = level.player.pos.copy()
 
-        elif(e.name == "TestEventA"):
-            for entity in [entity for entity in level.objects if issubclass(type(entity), Entity)]:
-                entity.health = 10
-                entity.armor = 0
+        # =================== MISC EVENTS ===================
 
-            level.player.health = 100
-            level.player.armor = 100
-            level.player.weapons.append(WeaponManager.CreateWeapon(name="Shotgun"))
-            level.player.weapons.append(WeaponManager.CreateWeapon(name="Railgun"))
-            level.player.selected_weapon_index = 2
-        
-        elif(e.name == "TestEventB"):
-            sentry = Mercenary(level.player.pos.add(0, 7))
-            sentry.weapons.append(WeaponManager.CreateWeapon(name="EnemyShotgun"))
-            sentry.selected_weapon_index = 0
-            level.objects.append(sentry)
-
-        elif(e.name == "PlayerShoot"):
-            fire_event("EntityShoot", params=level.player)
-        
-        elif(e.name == "PlayerObtainedFlag"):
-            play_sound('pickup')
-            level.delete_object(level.flag)
-            level.player.has_flag = True
-        
         elif(e.name == "Pause"):
             saved_events.clear()
             while not event_queue.empty():
@@ -855,19 +840,85 @@ def tick():
 
             change_gamestate(_previous_gamestate)
 
-        elif(e.name == "ToMainMenu"):
-            change_gamestate(Gamestate.MAIN_MENU)
+        elif(e.name == "TestEventA"):
+            for entity in [entity for entity in level.objects if issubclass(type(entity), Entity)]:
+                entity.health = 10
+                entity.armor = 0
+
+            level.player.health = 100
+            level.player.armor = 100
+            level.player.weapons.append(WeaponManager.CreateWeapon(name="Shotgun"))
+            level.player.weapons.append(WeaponManager.CreateWeapon(name="Railgun"))
+            level.player.selected_weapon_index = 2
+        
+        elif(e.name == "TestEventB"):
+            sentry = Sentry(level.player.pos.add(-1, 7))
+            sentry.weapons.append(WeaponManager.CreateWeapon(name="SentryGun"))
+            sentry.selected_weapon_index = 0
+            level.objects.append(sentry)
+
+            merc = Mercenary(level.player.pos.add(1, 7))
+            merc.weapons.append(WeaponManager.CreateWeapon(name="EnemyShotgun"))
+            merc.selected_weapon_index = 0
+            level.objects.append(merc)
+
+        elif(e.name == "PlayerShoot"):
+            fire_event("EntityShoot", params=level.player)
+        
+        elif(e.name == "PlayerObtainedFlag"):
+            play_sound('pickup')
+            level.delete_object(level.flag)
+            level.player.has_flag = True
+        
+
+        # =================== LEVEL EVENTS ===================
+
+        elif(e.name == "InitializeLevel"):
+            stdscr.clear()
+            _hud_frame_symbol = '#'
+            _hud_frame_attr = 0
+            camera_pos = level.player.pos.copy()
+
+        elif(e.name == "FlagCaptured"):
+            fire_event("Victory")
 
         elif(e.name == "Victory"):
             play_sound('victory')
             while not event_queue.empty():
                 event_queue.get()
-
             change_gamestate(Gamestate.WINSCREEN)
         
-        elif(e.name == "FlagCaptured"):
-            fire_event("Victory")
+        elif(e.name == "Defeat"):
+            play_sound('death')
+            change_gamestate(Gamestate.LOSESCREEN)
+        
+        # =================== PLAYER INPUT EVENTS ===================
 
+        elif(e.name == "PlayerMove"):
+            level.player.direction = Vector2F.from_Vector2(e.params.normalize())
+            move_object(level.player, e.params)
+            if(camera_pos.manhattan_distance_to(level.player.pos) > 9):
+                camera_pos = level.player.pos.add(-1, 0)
+
+        elif(e.name == "PlayerDash"):
+            if (not level.player.has_dash) or level.player.dash_speed == 0 or level.player.dash_cooldown > 0: return
+            play_sound('dash')
+            level.player.dash_cooldown = 1
+            level.player.invulnerable = True
+            fire_event("PlayerMove", params = Vector2.from_Vector2F(level.player.direction.mul(level.player.dash_speed)))
+            level.player.invulnerable = False
+
+        elif(e.name == "PlayerReload"):
+            fire_event("EntityReload", params=level.player)
+
+        elif(e.name == "PlayerWeaponSwitch"):
+            fire_event("EntityWeaponSwitch", params=(level.player, e.params-1))
+        
+        # =================== ENTITY EVENTS ===================
+        elif(e.name == "EntityMove"):
+            entity, move = e.params
+            move_object(entity, move)
+        
         elif(e.name == "EntityHurt"):
             entity, dmg = e.params
             if(dmg <= 0): continue
@@ -894,57 +945,6 @@ def tick():
                 fire_event("Defeat", delay=0.01)
             else:
                 play_sound('kill')
-            
-        elif(e.name == "PlayerWeaponSwitch"):
-            fire_event("EntityWeaponSwitch", params=(level.player, e.params-1))
-        
-        elif(e.name == "EntityWeaponSwitch"):
-            entity, num = e.params
-            if entity.deleted: continue
-            if not 0 <= num < len(entity.weapons): continue
-            if num == entity.selected_weapon_index: continue
-            entity.selected_weapon_index = num
-            play_sound("weapons/change")
-        
-        elif(e.name == "PlayerReload"):
-            fire_event("EntityReload", params=level.player)
-        
-        elif(e.name == "EntityReload"):
-            entity: Entity = e.params
-            selected_weapon: BaseWeapon = entity.get_selected_weapon()
-
-            if selected_weapon is None: continue
-            if selected_weapon.reloading > 0 or selected_weapon.reloading_time_left > 0: continue
-            if selected_weapon.ammo_reserve <= 0 and selected_weapon.ammo_reserve != -1: continue
-
-            play_random_sound(selected_weapon.sounds["reload"])
-            selected_weapon.reload()
-
-        elif(e.name == "Defeat"):
-            play_sound('death')
-            change_gamestate(Gamestate.LOSESCREEN)
-
-        elif(e.name == "PlayerDash"):
-            if (not level.player.has_dash) or level.player.dash_speed == 0 or level.player.dash_cooldown > 0: return
-            play_sound('dash')
-            level.player.dash_cooldown = 1
-            level.player.invulnerable = True
-            fire_event("PlayerMove", params = Vector2.from_Vector2F(level.player.direction.mul(level.player.dash_speed)))
-            level.player.invulnerable = False
-
-        elif(e.name == "PlayerMove"):
-            level.player.direction = Vector2F.from_Vector2(e.params.normalize())
-            move_object(level.player, e.params)
-            if(camera_pos.manhattan_distance_to(level.player.pos) > 9):
-                camera_pos = level.player.pos.add(-1, 0)
-        
-        elif(e.name == "PlayerHurtFlashOver"):
-            _hud_frame_symbol = '#'
-            _hud_frame_attr = 0
-        
-        elif(e.name == "EntityMove"):
-            entity, move = e.params
-            move_object(entity, move)
         
         elif(e.name == "EntityTackleEntity"):
             e1, e2 = e.params
@@ -963,6 +963,25 @@ def tick():
                 play_random_sound(selected_weapon.sounds["shoot"])
             else:
                 play_sound("weapons/noammo")
+        
+        elif(e.name == "EntityReload"):
+            entity: Entity = e.params
+            selected_weapon: BaseWeapon = entity.get_selected_weapon()
+
+            if selected_weapon is None: continue
+            if selected_weapon.reloading > 0 or selected_weapon.reloading_time_left > 0: continue
+            if selected_weapon.ammo_reserve <= 0 and selected_weapon.ammo_reserve != -1: continue
+
+            play_random_sound(selected_weapon.sounds["reload"])
+            selected_weapon.reload()
+        
+        elif(e.name == "EntityWeaponSwitch"):
+            entity, num = e.params
+            if entity.deleted: continue
+            if not 0 <= num < len(entity.weapons): continue
+            if num == entity.selected_weapon_index: continue
+            entity.selected_weapon_index = num
+            play_sound("weapons/change")
     
     for e in repeat_events: refire_event(e)
 
@@ -986,12 +1005,16 @@ def main(stdscr_in):
     load_colors()
     load_sounds()
     BUILTIN_LEVELS = level_sideloading.load_levels(BUILTIN_LEVELS_SERIAL)
+    aw = level_sideloading.save_level_raw(level_sideloading.BUILTIN_LEVEL_ZOO)
+    level_sideloading.load_level_raw(aw)
 
     last_time = time.perf_counter()
     last_tick_time = time.perf_counter()
     accumulator = 0
 
     change_gamestate(Gamestate.MAIN_MENU)
+
+    # Main loop
     while True:
         frame_start = time.perf_counter()
         _lifetime += _frametime

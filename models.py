@@ -129,6 +129,109 @@ class GameObject:
         obj.hidden = data["hidden"]
         return obj
 
+class ItemPickup(GameObject):
+    def __init__(self, pos: Vector2, symbol: str = "⬛"):
+        GameObject.__init__(self, pos, symbol)
+
+    @staticmethod
+    def from_parent(obj: GameObject,) -> "ItemPickup":
+        return ItemPickup(pos=obj.pos, symbol=obj.symbol)
+    
+    def serialize(self) -> dict:
+        data = super().serialize()
+        return data
+
+    @staticmethod
+    def deserialize(data: dict) -> "ItemPickup":
+        obj = ItemPickup.from_parent(GameObject.deserialize(data))
+        return obj
+
+class HealthPickup(ItemPickup):
+    def __init__(self, pos: Vector2, symbol: str = "🍒"):
+        ItemPickup.__init__(self, pos, symbol)
+        self.health = 3
+
+    @staticmethod
+    def from_parent(obj: ItemPickup) -> "HealthPickup":
+        return HealthPickup(pos=obj.pos, symbol=obj.symbol)
+    
+    def serialize(self) -> dict:
+        data = super().serialize()
+        data["health"] = self.health
+        return data
+
+    @staticmethod
+    def deserialize(data: dict) -> "HealthPickup":
+        obj = HealthPickup.from_parent(ItemPickup.deserialize(data))
+        obj.health = data["health"]
+        return obj
+
+class ArmorPickup(ItemPickup):
+    def __init__(self, pos: Vector2, symbol: str = "🧰"):
+        ItemPickup.__init__(self, pos, symbol)
+        self.armor = 3
+
+    @staticmethod
+    def from_parent(obj: ItemPickup) -> "ArmorPickup":
+        return ArmorPickup(pos=obj.pos, symbol=obj.symbol)
+    
+    def serialize(self) -> dict:
+        data = super().serialize()
+        data["armor"] = self.armor
+        return data
+
+    @staticmethod
+    def deserialize(data: dict) -> "ArmorPickup":
+        obj = ArmorPickup.from_parent(ItemPickup.deserialize(data))
+        obj.armor = data["armor"]
+        return obj
+
+class AmmoPickup(ItemPickup):
+    def __init__(self, pos: Vector2, symbol: str = "📦"):
+        ItemPickup.__init__(self, pos, symbol)
+        self.ammo_factor = 1
+
+    @staticmethod
+    def from_parent(obj: ItemPickup) -> "AmmoPickup":
+        return AmmoPickup(pos=obj.pos, symbol=obj.symbol)
+    
+    def serialize(self) -> dict:
+        data = super().serialize()
+        data["ammo_factor"] = self.ammo_factor
+        return data
+
+    @staticmethod
+    def deserialize(data: dict) -> "AmmoPickup":
+        obj = AmmoPickup.from_parent(ItemPickup.deserialize(data))
+        obj.ammo_factor = data["ammo_factor"]
+        return obj
+
+class WeaponPickup(ItemPickup):
+    def __init__(self, pos: Vector2, symbol: str = "🔫", weapon_name: str = "Pistol"):
+        ItemPickup.__init__(self, pos, symbol)
+        self.weapon_name = weapon_name
+        self.weapon_ammo = -1
+        self.weapon_ammo_reserve = -1
+
+    @staticmethod
+    def from_parent(obj: ItemPickup) -> "WeaponPickup":
+        return WeaponPickup(pos=obj.pos, symbol=obj.symbol)
+    
+    def serialize(self) -> dict:
+        data = super().serialize()
+        data["weapon_name"] = self.weapon_name
+        data["weapon_ammo"] = self.weapon_ammo
+        data["weapon_ammo_reserve"] = self.weapon_ammo_reserve
+        return data
+
+    @staticmethod
+    def deserialize(data: dict) -> "WeaponPickup":
+        obj = WeaponPickup.from_parent(ItemPickup.deserialize(data))
+        obj.weapon_name = data["weapon_name"]
+        obj.weapon_ammo = data["weapon_ammo"]
+        obj.weapon_ammo_reserve = data["weapon_ammo_reserve"]
+        return obj
+
 class Solid(GameObject):
     def __init__(self, pos: Vector2, symbol: str = "⬛", background: bool = False):
         GameObject.__init__(self, pos, symbol)
@@ -150,8 +253,8 @@ class Solid(GameObject):
         return obj
 
 class Wall(Solid):
-    def __init__(self, pos: Vector2, symbol: str = "⬛", breakable: bool = False):
-        Solid.__init__(self, pos, symbol)
+    def __init__(self, pos: Vector2, symbol: str = "⬛", background: bool = False, breakable: bool = False):
+        Solid.__init__(self, pos, symbol, background)
         self.breakable = False
 
     @staticmethod
@@ -205,7 +308,7 @@ class Flag(GameObject):
 
 class Hazard(Wall):
     def __init__(self, pos: Vector2, symbol: str = "❌", background: bool = False, breakable: bool = False, damage: int = 1):
-        GameObject.__init__(self, pos, symbol)
+        Wall.__init__(self, pos, symbol, background, breakable)
         self.damage = damage
 
     @staticmethod
@@ -269,6 +372,10 @@ class Entity(GameObject):
     
     def look_at(self, target: Vector2):
         self._direction = Vector2F.from_Vector2(target.add(-self.pos.y, -self.pos.x))
+
+    def set_weapon(self, weapon):
+        self.weapons.append(weapon)
+        self.selected_weapon_index = self.weapons.index(weapon)
     
     def get_selected_weapon(self):
         return (None if (self.selected_weapon_index == -1 or len(self.weapons) == 0)
@@ -285,7 +392,7 @@ class Entity(GameObject):
         data["direction"] = self.direction.serialize()
         data["invulnerable"] = self.invulnerable
         data["selected_weapon_index"] = self.selected_weapon_index
-        data["weapons"] = [weapon.serialize() for weapon in self.weapons]
+        data["weapons_to_load"] = [weapon.serialize() for weapon in self.weapons]
         return data
 
     @staticmethod
@@ -297,7 +404,7 @@ class Entity(GameObject):
         obj.invulnerable = data["invulnerable"]
         obj.selected_weapon_index = data["selected_weapon_index"]
         obj.weapons = []
-        obj.weapons_to_load = [weapon for weapon in data["weapons"]]
+        obj.weapons_to_load = [weapon for weapon in data.get("weapons_to_load", [])]
         return obj
 
 class Player(Entity):
@@ -437,11 +544,11 @@ class GameLevel:
     
     @property
     def spawns(self):
-        return [obj for obj in self.objects if obj.type == "Spawn"]
+        return [obj for obj in self.objects if issubclass(type(obj), Spawn)]
 
     @property
     def flags(self):
-        return [obj for obj in self.objects if obj.type == "Flag"]
+        return [obj for obj in self.objects if issubclass(type(obj), Flag)]
 
     @property
     def spawn(self):
@@ -502,7 +609,7 @@ class GameLevel:
         obj.objects_to_load = data["objects"]
         obj.starting_score = data.get("starting_score", 100)
         obj.max_score = data.get("max_score", 100)
-        obj.size = data.get("size", GameLevel.default_size.copy())
+        obj.size = Vector2.deserialize(data.get("size", {"y": 20, "x": 20}))
         return obj
     
 class Menu:

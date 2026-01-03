@@ -1,5 +1,6 @@
 import heapq, itertools, random
 from models import *
+from weapons import WeaponManager
 
 class EnemyAction:
     def __init__(self, action: str, **kwargs):
@@ -39,6 +40,7 @@ class Enemy(Entity):
         return obj
 
     def think(self, level: GameLevel, deltatime: float) -> EnemyAction:
+        if(self.ai_disabled): return None
         self.think_cooldown -= deltatime
         if(self.think_cooldown <= 0):
             self.think_cooldown = 1.0 / self.speed + (random.random() - 0.5) * 2 * self.speed_random_deviation
@@ -58,6 +60,9 @@ def is_walkable(pos: Vector2, objects: list[GameObject]) -> bool:
     return True
 
 def astar_next_move(start: Vector2, goal: Vector2, level: GameLevel):
+    if start == goal: return None
+    if not is_walkable(goal, level.objects): return None
+
     open_set = []
     heapq.heappush(open_set, (0, next(_counter), start))
 
@@ -101,7 +106,7 @@ def astar_next_move(start: Vector2, goal: Vector2, level: GameLevel):
                 f = tentative_g + neighbor.manhattan_distance_to(goal)
                 heapq.heappush(open_set, (f, next(_counter), neighbor))
 
-    return None  # no path
+    return None
 
 def raytrace(start: Vector2, end: Vector2, objects: list[GameObject]) -> bool:
     x0, y0 = start.x, start.y
@@ -158,10 +163,10 @@ class Ghost(Enemy):
         return obj
 
     def think(self, level: GameLevel, deltatime: float) -> EnemyAction:
-        self.think_cooldown -= deltatime
+        if(self.ai_disabled): return None
 
+        self.think_cooldown -= deltatime
         if(self.think_cooldown > 0): return None
-        
         self.think_cooldown = 1.0 / self.speed + (random.random() - 0.5) * 2 * self.speed_random_deviation
 
         if(self.pos.manhattan_distance_to(level.player.pos) <= 1):
@@ -180,21 +185,20 @@ class Sentry(Enemy):
         self.health = 10
 
     @staticmethod
-    def from_parent(obj: Enemy) -> "Ghost":
-        return Ghost(pos=obj.pos, symbol=obj.symbol)
+    def from_parent(obj: Enemy) -> "Sentry":
+        return Sentry(pos=obj.pos, symbol=obj.symbol)
     
     def serialize(self) -> dict:
         data = super().serialize()
-        data["strength"] = self.strength
         return data
 
     @staticmethod
-    def deserialize(data: dict) -> "Ghost":
-        obj = Ghost.from_parent(Enemy.deserialize(data))
-        obj.strength = data["strength"]
+    def deserialize(data: dict) -> "Sentry":
+        obj = Sentry.from_parent(Enemy.deserialize(data))
         return obj
 
     def think(self, level: GameLevel, deltatime: float) -> EnemyAction:
+        if(self.ai_disabled): return None
         self.think_cooldown -= deltatime
         if(self.think_cooldown > 0): return None
         self.think_cooldown = 1.0 / self.speed + (random.random() - 0.5) * 2 * self.speed_random_deviation
@@ -230,10 +234,10 @@ class Mercenary(Enemy):
         return obj
 
     def think(self, level: GameLevel, deltatime: float) -> EnemyAction:
-        self.think_cooldown -= deltatime
+        if(self.ai_disabled): return None
 
+        self.think_cooldown -= deltatime
         if(self.think_cooldown > 0): return None
-        
         self.think_cooldown = 1.0 / self.speed + (random.random() - 0.5) * 2 * self.speed_random_deviation
 
         if(self.pos.manhattan_distance_to(level.player.pos) <= 1):
