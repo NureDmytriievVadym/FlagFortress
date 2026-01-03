@@ -3,9 +3,11 @@ import random
 
 class BaseWeapon:
     name = "BaseWeapon"
+    shorthand = "W"
 
     def __init__(self):
         self.name = "BaseWeapon"
+        self.shorthand = "W"
         self.ammo = 5
         self.mag_size = 5
         self.ammo_reserve = 5
@@ -61,10 +63,12 @@ class BaseWeapon:
 
 class Pistol(BaseWeapon):
     name = "Pistol"
+    shorthand = "P"
 
     def __init__(self):
         BaseWeapon.__init__(self)
         self.name = "Pistol"
+        self.shorthand = "P"
         self.ammo = 5
         self.mag_size = 5
         self.ammo_reserve = 5
@@ -90,7 +94,7 @@ class Pistol(BaseWeapon):
         spread = math.radians(random.random() * self.spread - self.spread/2)
         direction = Vector2(math.sin(spread) * shooter.direction.x + math.cos(spread) * shooter.direction.y,
                             math.cos(spread) * shooter.direction.x - math.sin(spread) * shooter.direction.y)
-        bullet = PlayerBullet(shooter.pos.copy(), direction)
+        bullet = Bullet(shooter.pos.copy(), direction, shooter)
         level.add_object(bullet)
         self.shooting_time_left = 1.0 / self.firerate
         return True
@@ -104,10 +108,12 @@ class Pistol(BaseWeapon):
 
 class Shotgun(BaseWeapon):
     name = "Shotgun"
+    shorthand = "SH"
 
     def __init__(self):
         BaseWeapon.__init__(self)
         self.name = "Shotgun"
+        self.shorthand = "SH"
         self.ammo = 2
         self.mag_size = 2
         self.ammo_reserve = 4
@@ -136,7 +142,7 @@ class Shotgun(BaseWeapon):
         for i in range(bullet_count):
             angle = (i + 0.5) * spread_per_bullet - spread / 2
             angle = angle + random.random() * spread_per_bullet - spread_per_bullet / 2
-            bullet = PlayerBullet(shooter.pos.copy(), shooter.direction.rotate(angle))
+            bullet = Bullet(shooter.pos.copy(), shooter.direction.rotate(angle), shooter)
             bullet.speed = random.random() * 10 + 15
             level.add_object(bullet)
         self.shooting_time_left = 1.0 / self.firerate
@@ -151,10 +157,12 @@ class Shotgun(BaseWeapon):
 
 class Railgun(BaseWeapon):
     name = "Railgun"
+    shorthand = "RG"
 
     def __init__(self):
         BaseWeapon.__init__(self)
         self.name = "Railgun"
+        self.shorthand = "RG"
         self.ammo = 1
         self.mag_size = 1
         self.ammo_reserve = 4
@@ -179,7 +187,7 @@ class Railgun(BaseWeapon):
     def shoot(self, level: GameLevel, shooter: Entity) -> bool:
         bullet_count = 20
         for i in range(bullet_count):
-            bullet = PlayerBullet(shooter.pos.copy(), shooter.direction)
+            bullet = Bullet(shooter.pos.copy(), shooter.direction, shooter)
             bullet.speed = 20 + i * 20
             bullet.lifetime = 0.1
             bullet.pierce = -1

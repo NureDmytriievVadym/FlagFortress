@@ -123,14 +123,34 @@ class GameObject:
         obj.hidden = data["hidden"]
         return obj
 
-class Wall(GameObject):
-    def __init__(self, pos: Vector2, symbol: str = "⬛", breakable: bool = False):
+class Solid(GameObject):
+    def __init__(self, pos: Vector2, symbol: str = "⬛", background: bool = False):
         GameObject.__init__(self, pos, symbol)
-        self.breakable = breakable
+        self.background = False
 
     @staticmethod
-    def from_parent(obj: GameObject, breakable: bool = False) -> "Wall":
-        return Wall(pos=obj.pos, symbol=obj.symbol, breakable=breakable)
+    def from_parent(obj: GameObject, background: bool = False) -> "Solid":
+        return Solid(pos=obj.pos, symbol=obj.symbol, background=background)
+    
+    def serialize(self) -> dict:
+        data = super().serialize()
+        data["background"] = self.background
+        return data
+
+    @staticmethod
+    def deserialize(data: dict) -> "Solid":
+        obj = Solid.from_parent(GameObject.deserialize(data))
+        obj.background = data.get("background") or False
+        return obj
+
+class Wall(Solid):
+    def __init__(self, pos: Vector2, symbol: str = "⬛", breakable: bool = False):
+        Solid.__init__(self, pos, symbol)
+        self.breakable = False
+
+    @staticmethod
+    def from_parent(obj: Solid, breakable: bool = False) -> "Wall":
+        return Wall(pos=obj.pos, symbol=obj.symbol, breakable=False)
     
     def serialize(self) -> dict:
         data = super().serialize()
@@ -139,7 +159,7 @@ class Wall(GameObject):
 
     @staticmethod
     def deserialize(data: dict) -> "Wall":
-        obj = Wall.from_parent(GameObject.deserialize(data))
+        obj = Wall.from_parent(Solid.deserialize(data))
         obj.breakable = data["breakable"]
         return obj
 
@@ -220,6 +240,7 @@ class Player(Entity):
         self.dash_speed = 3
         self.dash_cooldown = 0
         self.order = 100
+        self.has_flag = False
 
     @staticmethod
     def from_parent(obj: Entity) -> "Player":
@@ -230,6 +251,7 @@ class Player(Entity):
         data["has_dash"] = self.has_dash
         data["dash_speed"] = self.dash_speed
         data["dash_cooldown"] = self.dash_cooldown
+        data["has_flag"] = self.has_flag
         return data
 
     @staticmethod
@@ -238,6 +260,7 @@ class Player(Entity):
         obj.has_dash = data["has_dash"]
         obj.dash_speed = data["dash_speed"]
         obj.dash_cooldown = data["dash_cooldown"]
+        obj.has_flag = data["has_flag"]
         return obj
 
 class Spawn(GameObject):
@@ -301,13 +324,14 @@ class Hazard(GameObject):
         return obj
 
 class Projectile(GameObject):
-    def __init__(self, pos: Vector2, direction: Vector2, symbol: str = "+", speed: float = 5, lifetime: float = 4):
+    def __init__(self, pos: Vector2, direction: Vector2, owner: Entity = None, symbol: str = "+", speed: float = 5, lifetime: float = 4):
         GameObject.__init__(self, pos, symbol)
         self.subpos = Vector2F(0, 0)
         self.direction = direction.normalize()
         self.speed = speed
         self.lifetime = lifetime
         self.damage = 2
+        self.owner = owner
     
     @staticmethod
     def from_parent(obj: GameObject, direction: Vector2, symbol: str = "+", speed: float = 5) -> "Projectile":
@@ -319,6 +343,7 @@ class Projectile(GameObject):
         data["direction"] = self.direction.serialize()
         data["speed"] = self.speed
         data["damage"] = self.damage
+        data["owner"] = self.owner
         return data
 
     @staticmethod
@@ -328,26 +353,30 @@ class Projectile(GameObject):
         obj.direction = Vector2F.deserialize(data["direction"])
         obj.speed = data["speed"]
         obj.damage = data["damage"]
+        obj.owner = data["owner"]
         return obj
 
-class PlayerBullet(Projectile):
-    def __init__(self, pos: Vector2, direction: Vector2, symbol: str = "+", speed: float = 5, pierce: int = 0):
-        Projectile.__init__(self, pos, direction, symbol, speed)
+class Bullet(Projectile):
+    def __init__(self, pos: Vector2, direction: Vector2, owner: Entity = None, symbol: str = "+", speed: float = 5, pierce: int = 0, wallbang: int = 0):
+        Projectile.__init__(self, pos, direction, owner, symbol, speed)
         self.pierce = pierce
+        self.wallbang = wallbang
 
     @staticmethod
-    def from_parent(obj: Projectile, direction: Vector2, symbol: str = "+", speed: float = 5, pierce: int = 0) -> "PlayerBullet":
-        return PlayerBullet(pos=obj.pos, symbol=obj.symbol, direction=direction, speed=speed, pierce=pierce)
+    def from_parent(obj: Projectile, direction: Vector2, owner: Entity = None, symbol: str = "+", speed: float = 5, pierce: int = 0) -> "Bullet":
+        return Bullet(pos=obj.pos, symbol=obj.symbol, direction=direction, owner=owner, speed=speed, pierce=pierce)
 
     def serialize(self) -> dict:
         data = super().serialize()
+        data["wallbang"] = self.wallbang
         data["pierce"] = self.pierce
         return data
 
     @staticmethod
-    def deserialize(data: dict) -> "PlayerBullet":
-        obj = PlayerBullet.from_parent(Projectile.deserialize(data))
+    def deserialize(data: dict) -> "Bullet":
+        obj = Bullet.from_parent(Projectile.deserialize(data))
         obj.pierce = data["pierce"]
+        obj.wallbang = data["wallbang"]
         return obj
 
 class Event:
