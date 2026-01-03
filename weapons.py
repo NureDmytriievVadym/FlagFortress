@@ -70,7 +70,7 @@ class Pistol(BaseWeapon):
         self.reload_time = 1
         self.spread = 0
         self.sounds = {
-            "shoot": ["shoot"],
+            "shoot": ["weapons/chaingun/f1b", "weapons/chaingun/f2b", "weapons/chaingun/f3b", "weapons/chaingun/f4b"],
             "reload": ["reload"]
         }
     

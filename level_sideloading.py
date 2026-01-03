@@ -5,6 +5,8 @@ from weapons import *
 
 _LEVEL_ENCODING = 'utf-16'
 
+loaded_levels: list[GameLevel] = []
+
 def get_type(type_name: str) -> type:
     return globals().get(type_name, type(None))
 
@@ -13,8 +15,6 @@ def load_level_objects(level: GameLevel) -> None:
     for level_obj in level.objects_to_load:
         level_obj_type = get_type(level_obj["type"])
         level.objects.append(level_obj_type.deserialize(level_obj))
-    
-    level.objects_to_load = None
 
 def load_entity_weapons(ent: Entity) -> None:
     ent.weapons = []
@@ -22,8 +22,6 @@ def load_entity_weapons(ent: Entity) -> None:
     for wep in ent.weapons_to_load:
         wep_type = get_type(wep["name"])
         ent.weapons.append().append(wep_type.deserialize(wep))
-    
-    ent.weapons_to_load = None
         
 
 def save_level(level: GameLevel) -> bytearray:
@@ -69,6 +67,7 @@ def load_level(b: bytearray) -> GameLevel:
     level = GameLevel.deserialize(serial)
     load_level_objects(level)
     for ent in [obj for obj in level.objects if issubclass(type(obj), Entity)]: load_entity_weapons(ent)
+    loaded_levels.append(level)
     return level
 
 def load_levels(b: bytearray) -> list[GameLevel]:
@@ -83,6 +82,7 @@ def load_levels(b: bytearray) -> list[GameLevel]:
         level = GameLevel.deserialize(serial)
         load_level_objects(level)
         for ent in [obj for obj in level.objects if issubclass(type(obj), Entity)]: load_entity_weapons(ent)
+        loaded_levels.append(level)
         levels.append(level)
     return levels
 

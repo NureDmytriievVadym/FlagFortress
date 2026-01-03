@@ -352,6 +352,21 @@ class GameLevel:
         self.objects = objects[:]
         self.objects_to_load = None
         self.current_spawn_index = 0
+
+    def copy(self):
+        level = GameLevel()
+        level.name = self.name
+        level.author = self.author
+        level.description = self.description
+        level.starting_weapon_name = self.starting_weapon_name
+        level.starting_weapon_ammo = self.starting_weapon_ammo
+        level.starting_weapon_ammo_reserve = self.starting_weapon_ammo_reserve
+        level.starting_health = self.starting_health
+        level.starting_armor = self.starting_armor
+        level.objects = []
+        level.objects_to_load = self.objects_to_load
+        level.current_spawn_index = self.current_spawn_index
+        return level
     
     @property
     def spawns(self):
@@ -422,6 +437,7 @@ class Menu:
         self.size = size
         self.caption = caption
         self.description = description
+        self.options_offset = Vector2(0, 0)
         self.options = options
         self.selected_option = 0
         self.frame_symbol = '#'
