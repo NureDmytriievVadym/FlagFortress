@@ -269,8 +269,11 @@ class Flag(GameObject):
         return obj
 
 class Hazard(GameObject):
-    def __init__(self, pos: Vector2, symbol: str = "❌", background: bool = False, breakable: bool = False):
+    def __init__(self, pos: Vector2, symbol: str = "❌", background: bool = False, breakable: bool = False, damage: int = 1):
         GameObject.__init__(self, pos, symbol)
+        self.background = background
+        self.breakable = breakable
+        self.damage = damage
 
     @staticmethod
     def from_parent(obj: GameObject) -> "Hazard":
@@ -278,11 +281,17 @@ class Hazard(GameObject):
     
     def serialize(self) -> dict:
         data = super().serialize()
+        data["background"] = self.background
+        data["breakable"] = self.breakable
+        data["damage"] = self.damage
         return data
 
     @staticmethod
     def deserialize(data: dict) -> "Hazard":
         obj = Hazard.from_parent(GameObject.deserialize(data))
+        obj.background = data["background"]
+        obj.breakable = data["breakable"]
+        obj.damage = data["damage"]
         return obj
 
 class Projectile(GameObject):
@@ -349,6 +358,9 @@ class GameLevel:
         self.starting_weapon_ammo_reserve = 4
         self.starting_health = 4
         self.starting_armor = 0
+        self.starting_score = 100
+        self.max_score = 100
+        self.original = None
         self.objects = objects[:]
         self.objects_to_load = None
         self.current_spawn_index = 0
@@ -363,7 +375,10 @@ class GameLevel:
         level.starting_weapon_ammo_reserve = self.starting_weapon_ammo_reserve
         level.starting_health = self.starting_health
         level.starting_armor = self.starting_armor
+        level.starting_score = self.starting_score
+        level.max_score = self.max_score
         level.objects = []
+        level.original = self
         level.objects_to_load = self.objects_to_load
         level.current_spawn_index = self.current_spawn_index
         return level
@@ -415,6 +430,8 @@ class GameLevel:
         data["starting_weapon_ammo_reserve"] = self.starting_weapon_ammo_reserve
         data["starting_health"] = self.starting_health
         data["starting_armor"] = self.starting_armor
+        data["starting_score"] = self.starting_score
+        data["max_score"] = self.max_score
         data["objects"] = [obj.serialize() for obj in self.objects]
         return data
 
@@ -430,6 +447,8 @@ class GameLevel:
         obj.starting_health = data["starting_health"]
         obj.starting_armor = data["starting_armor"]
         obj.objects_to_load = data["objects"]
+        obj.starting_score = data.get("starting_score", 100)
+        obj.max_score = data.get("max_score", 100)
         return obj
     
 class Menu:

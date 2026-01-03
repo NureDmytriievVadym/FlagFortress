@@ -34,6 +34,7 @@ class Gamestate(Enum):
     WINSCREEN = 5
     LOSESCREEN = 6
 _gamestate: Gamestate = Gamestate.MAIN_MENU
+_previous_gamestate: Gamestate = Gamestate.MAIN_MENU
 _options_saved_volume = config.VOLUME
 stdscr = None
 
@@ -47,17 +48,33 @@ BIG_TEXT = {
  ╚████╔╝ ██║   ██║██║   ██║    ██║ █╗ ██║██║██╔██╗ ██║
   ╚██╔╝  ██║   ██║██║   ██║    ██║███╗██║██║██║╚██╗██║
    ██║   ╚██████╔╝╚██████╔╝    ╚███╔███╔╝██║██║ ╚████║
-   ╚═╝    ╚═════╝  ╚═════╝      ╚══╝╚══╝ ╚═╝╚═╝  ╚═══╝"""
+   ╚═╝    ╚═════╝  ╚═════╝      ╚══╝╚══╝ ╚═╝╚═╝  ╚═══╝""",
+   "YOU LOSE": """
+██╗   ██╗ ██████╗ ██╗   ██╗    ██╗      ██████╗ ███████╗███████╗
+╚██╗ ██╔╝██╔═══██╗██║   ██║    ██║     ██╔═══██╗██╔════╝██╔════╝
+ ╚████╔╝ ██║   ██║██║   ██║    ██║     ██║   ██║███████╗█████╗  
+  ╚██╔╝  ██║   ██║██║   ██║    ██║     ██║   ██║╚════██║██╔══╝  
+   ██║   ╚██████╔╝╚██████╔╝    ███████╗╚██████╔╝███████║███████╗
+   ╚═╝    ╚═════╝  ╚═════╝     ╚══════╝ ╚═════╝ ╚══════╝╚══════╝""",
+   "FF": """
+   ▄████████    ▄████████ 
+  ███    ███   ███    ███ 
+  ███    █▀    ███    █▀  
+ ▄███▄▄▄      ▄███▄▄▄     
+▀▀███▀▀▀     ▀▀███▀▀▀     
+  ███          ███        
+  ███          ███        
+  ███          ███        """
 }
 
 MENUS = {
-    "MainMenu": Menu(Vector2(16, 48), "FlagFortress", "Capture the Flag in your terminal!", [
+    "MainMenu": Menu(Vector2(20, 48), "FlagFortress", BIG_TEXT["FF"] + "\n\nCapture the Flag in your terminal!", [
         ["play_builtin", "Start Game"],
         ["play_custom", "Play Custom Levels"],
         ["open_options", "Options"],
         ["quit", "Quit"]
     ]),
-    "Options": Menu(Vector2(16, 48), "Options", "Customize the game to your liking", [
+    "Options": Menu(Vector2(16, 42), "Options", "Customize the game to your liking", [
         ["options_set_target_tickrate", f"Target Tickrate ({config.TARGET_TICKRATE})"],
         ["options_set_max_fps", f"Target FPS ({config.TARGET_FPS})"],
         ["options_set_volume", f"Volume ({config.VOLUME})"],
@@ -65,14 +82,14 @@ MENUS = {
         ["options_set_debug", f"Debug Mode ({config.DEBUG})"],
         ["back", "Back"]
     ]),
-    "Options_Target_Tickrate": Menu(Vector2(16, 48), "Target Tickrate", "Current value: ", [
+    "Options_Target_Tickrate": Menu(Vector2(10, 36), "Target Tickrate", "Current value: ", [
         ["options_set_target_tickrate_500", "500"],
         ["options_set_target_tickrate_100", "100"],
         ["options_set_target_tickrate_30", "30"],
         ["options_set_target_tickrate_10", "10"],
         ["back", "Back"]
     ]),
-    "Options_Max_FPS": Menu(Vector2(16, 48), "Max FPS", "Current value: ", [
+    "Options_Max_FPS": Menu(Vector2(14, 36), "Max FPS", "Current value: ", [
         ["options_set_max_fps_1000", "1000"],
         ["options_set_max_fps_250", "250"],
         ["options_set_max_fps_144", "144"],
@@ -82,7 +99,7 @@ MENUS = {
         ["options_set_max_fps_10", "10"],
         ["back", "Back"]
     ]),
-    "Options_Volume": Menu(Vector2(16, 48), "Volume", "Current value: ", [
+    "Options_Volume": Menu(Vector2(16, 36), "Volume", "Current value: ", [
         ["options_set_volume_100", "100"],
         ["options_set_volume_90", "90"],
         ["options_set_volume_80", "80"],
@@ -107,17 +124,26 @@ MENUS = {
     "Winscreen_Custom": Menu(Vector2(20, 64), "", BIG_TEXT["YOU WIN"], [
         ["to_mainmenu", "To Main Menu"]
     ]),
+    "Losescreen": Menu(Vector2(20, 70), "", BIG_TEXT["YOU LOSE"], [
+        ["try_again", "Try again"],
+        ["to_mainmenu", "To Main Menu"]
+    ]),
     "LevelSelection": Menu(Vector2(32, 64), "Level selection", "", [])
 }
 
-MENUS["Winscreen"].options_offset = Vector2(6, 0)
-MENUS["Winscreen_Custom"].options_offset = Vector2(6, 0)
+MENUS["MainMenu"].options_offset = Vector2(6, 0)
+MENUS["Winscreen"].options_offset = Vector2(8, 0)
+MENUS["Winscreen_Custom"].options_offset = Vector2(8, 0)
+MENUS["Options_Max_FPS"].options_offset = Vector2(1, 0)
+MENUS["Options_Volume"].options_offset = Vector2(1, 0)
+MENUS["Losescreen"].options_offset = Vector2(8, 0)
 
 menu: Menu = None
 campaign_level: int = 0
 level: GameLevel = None
+level_time: float = 0
+level_score_additive: int = 0 
 event_queue = queue.SimpleQueue()
-saved_gamestate: Gamestate = Gamestate.INGAME
 saved_events = []
 
 def load_colors():
@@ -182,7 +208,6 @@ def handle_input():
         elif(c.lower() == "m"): fire_event("ToMainMenu")
         elif(c.lower() == "c"): fire_event("PlayerDash")
         elif(c.lower() == "f"): fire_event("PlayerShoot")
-        elif(c.lower() == "k" and config.DEBUG): fire_event("PlayerHurt", params = 1)
         elif(c.lower() == "p"): fire_event("Pause")
     else:
         if(c == "KEY_UP"): fire_event("MoveMenuOption", params = -1)
@@ -190,9 +215,22 @@ def handle_input():
         elif(c == "KEY_LEFT"): fire_event("BackOption", params = -1)
         elif(c == "KEY_RIGHT"): fire_event("SelectMenuOption")
 
+def get_score():
+    global _gamestate
+    global level
+    global level_time
+    global level_score_additive
+
+    if not _gamestate in (Gamestate.INGAME, Gamestate.INGAME_CUSTOM, Gamestate.INGAME_PAUSED): return 0
+    return min(level.starting_score + level_score_additive - math.floor(level_time), level.max_score)
+
 def play_level(lvl: GameLevel):
     global level
+    global level_time
+    global level_score_additive
     level = lvl.copy()
+    level_score_additive = 0
+    level_time = 0
     level_sideloading.load_level_objects(level)
     for ent in [obj for obj in level.objects if issubclass(type(obj), Entity)]: level_sideloading.load_entity_weapons(ent)
     level.player = Player(level.spawn.pos.copy())
@@ -277,7 +315,7 @@ def render_menu(menu: Menu, pos: Vector2):
     option_count = len(menu.options)
     for i in range(len(menu.options)):
         option = menu.options[i]
-        stdscr.addstr(menu.options_offset.y + math.floor(pos.y - math.floor(option_count/2)) + i, menu.options_offset.x + math.floor(pos.x - len(option[1])/2)+1, option[1])
+        stdscr.addstr(menu.options_offset.y + math.floor(pos.y - math.floor(option_count/2)) + i, menu.options_offset.x + math.floor(pos.x - len(option[1])/2), f" {option[1]} ")
         max_option_len = max(max_option_len, len(option[1]))
     
     if len(menu.options) > 0:
@@ -286,19 +324,6 @@ def render_menu(menu: Menu, pos: Vector2):
 def render_current_menu():
     global menu
     render_menu(menu, Vector2(_screensize.y / 2, _screensize.x / 2))
-
-def render_ingame_seperate():
-    global stdscr
-
-    for i in range(config.LEVEL_HEIGHT + 1):
-        stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y + i, config.LEVEL_SCREEN_OFFSET_X, "!" * (config.LEVEL_WIDTH * 2 + 2))
-    
-    for obj in level.objects:
-        if(obj.hidden): continue
-        stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y + obj.pos.y, config.LEVEL_SCREEN_OFFSET_X + obj.pos.x * 2, obj.symbol)
-    
-    if(not level.player is None):
-        stdscr.addch(config.LEVEL_SCREEN_OFFSET_Y + level.player.pos.y, config.LEVEL_SCREEN_OFFSET_X + level.player.pos.x * 2, level.player.symbol)
 
 def render_ingame_matrix():
     global stdscr
@@ -373,7 +398,7 @@ def on_collide(a: GameObject, b: GameObject):
         fire_event("FlagCaptured")
 
     elif(a.type == "Player" and b.type == "Hazard" and not a.invulnerable):
-        fire_event("PlayerHurt", 0, 1)
+        fire_event("EntityHurt", 0, (level.player, b.damage))
     
     elif(a.type == "PlayerBullet" and b.type == "Wall"):
         if(a.pierce != -1):
@@ -430,6 +455,7 @@ def move_object(a: GameObject, move: Vector2):
 def change_gamestate(gamestate: Gamestate):
     global _gamestate
     global menu
+    global _previous_gamestate
     if(gamestate == Gamestate.MAIN_MENU):
         render_clear()
         level = None
@@ -450,7 +476,10 @@ def change_gamestate(gamestate: Gamestate):
         render_hud()
     elif(gamestate == Gamestate.WINSCREEN):
         menu = MENUS["Winscreen"] if _gamestate == Gamestate.INGAME and campaign_level < len(BUILTIN_LEVELS) - 1 else MENUS["Winscreen_Custom"]
+    elif(gamestate == Gamestate.LOSESCREEN):
+        menu = MENUS["Losescreen"]
     
+    _previous_gamestate = _gamestate
     _gamestate = gamestate
 
 def process_menu_action(action: str):
@@ -458,6 +487,7 @@ def process_menu_action(action: str):
     global _options_saved_volume
     global menu
     global campaign_level
+    global _previous_gamestate
     if(action == "play_builtin"):
         change_gamestate(Gamestate.INGAME)
         campaign_level = 0
@@ -469,6 +499,9 @@ def process_menu_action(action: str):
             lv = level_sideloading.loaded_levels[i]
             menu.options.append([f"select_level_{i}", f"{lv.name}"])
         menu.options.append(["back", "Back"])
+    elif(action == "try_again"):
+        change_gamestate(_previous_gamestate)
+        play_level(level.original)
     elif(action.startswith("select_level_")):
         change_gamestate(Gamestate.INGAME_CUSTOM)
         lv_num = int(action.split('_')[-1])
@@ -538,12 +571,16 @@ def tick():
     global stdscr
     global event_queue
     global menu
-    global saved_gamestate
+    global _previous_gamestate
     global saved_events
     global campaign_level
     global _deltatime
+    global level_time
+    global level_score_additive
 
     if(_gamestate in (Gamestate.INGAME, Gamestate.INGAME_CUSTOM)):
+        level_time += _deltatime
+
         if(level.player.dash_cooldown > 0):
             level.player.dash_cooldown = max(0, level.player.dash_cooldown - _deltatime)
 
@@ -562,9 +599,9 @@ def tick():
             decision = enemy.think(level, _deltatime)
             if decision is None: continue
             if(decision.action == "Move"):
-                fire_event("EnemyMove", params=(enemy, decision.move))
-            elif(decision.action == "TacklePlayer"):
-                fire_event("EnemyTacklePlayer", params=enemy)  
+                fire_event("EntityMove", params=(enemy, decision.move))
+            elif(decision.action == "TackleEntity"):
+                fire_event("EntityTackleEntity", params=(enemy, decision.target))  
 
     repeat_events = []
     while(not event_queue.empty()):
@@ -607,7 +644,6 @@ def tick():
             level.flag.hidden = True
         
         elif(e.name == "Pause"):
-            saved_gamestate = _gamestate
             saved_events.clear()
             while not event_queue.empty():
                 saved_events.append(event_queue.get())
@@ -619,7 +655,7 @@ def tick():
                 event_queue.put(saved_events[-1])
                 saved_events.remove(saved_events[-1])
 
-            change_gamestate(saved_gamestate)
+            change_gamestate(_previous_gamestate)
 
         elif(e.name == "ToMainMenu"):
             change_gamestate(Gamestate.MAIN_MENU)
@@ -634,8 +670,34 @@ def tick():
         elif(e.name == "FlagCaptured"):
             fire_event("Victory")
 
+        elif(e.name == "EntityHurt"):
+            entity, dmg = e.params
+            if(dmg <= 0): continue
+            play_sound('hurt')
+            armor_absorbed_dmg = min(entity.armor, math.ceil(dmg * 0.66))
+            entity.health -= dmg - armor_absorbed_dmg
+            entity.armor -= armor_absorbed_dmg
+
+            fire_event("EntityDying", params=entity)
+
+            if(entity == level.player):
+                render_level_frame('@', curses.color_pair(1))
+                fire_event("PlayerHurtFlashOver", delay = 0.2)
+
+        elif(e.name == "EntityDying"):
+            entity = e.params
+            level.delete_object(entity)
+            if(entity == level.player): fire_event("Defeat")
+        
+        elif(e.name == "Defeat"):
+            play_sound('death')
+            while not event_queue.empty():
+                event_queue.get()
+
+            change_gamestate(Gamestate.LOSESCREEN)
+
         elif(e.name == "PlayerDash"):
-            if (not level.player.has_dash) or level.player.dash_speed == 0: return
+            if (not level.player.has_dash) or level.player.dash_speed == 0 or level.player.dash_cooldown > 0: return
             play_sound('dash')
             level.player.dash_cooldown = 1
             level.player.invulnerable = True
@@ -646,28 +708,17 @@ def tick():
             level.player.direction = Vector2F.from_Vector2(e.params.normalize())
             move_object(level.player, e.params)
         
-        elif(e.name == "PlayerHurt"):
-            dmg = e.params
-            if(dmg <= 0): continue
-            play_sound('hurt')
-            armor_absorbed_dmg = min(level.player.armor, math.ceil(dmg * 0.66))
-            level.player.health -= dmg - armor_absorbed_dmg
-            level.player.armor -= armor_absorbed_dmg
-            render_level_frame('@', curses.color_pair(1))
-            fire_event("PlayerHurtFlashOver", delay = 0.2)
-            # todo
-        
         elif(e.name == "PlayerHurtFlashOver"):
             render_level_frame('#')
         
-        elif(e.name == "EnemyMove"):
-            enemy, move = e.params
-            move_object(enemy, move)
+        elif(e.name == "EntityMove"):
+            entity, move = e.params
+            move_object(entity, move)
         
-        elif(e.name == "EnemyTacklePlayer"):
-            enemy = e.params
-            if(level.player.invulnerable): return
-            fire_event("PlayerHurt", params=max(0, enemy.strength))
+        elif(e.name == "EntityTackleEntity"):
+            e1, e2 = e.params
+            if(e2.invulnerable): return
+            fire_event("EntityHurt", params=(e2, max(0, e1.strength)))
     
     for e in repeat_events: refire_event(e)
 

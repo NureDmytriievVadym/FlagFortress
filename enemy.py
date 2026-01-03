@@ -2,9 +2,12 @@ import heapq, itertools, random
 from models import *
 
 class EnemyAction:
-    def __init__(self, action: str, move: Vector2 = Vector2(0, 0)):
-        self.action = action
-        self.move = move
+    def __init__(self, action: str, **kwargs):
+        self.action: str = action
+        self.move: Vector2 = None
+        self.target: Entity = None
+        if kwargs.get("move"): self.move = kwargs.get("move")
+        if kwargs.get("target"): self.target = kwargs.get("target")
 
 class Enemy(Entity):
     def __init__(self, pos: Vector2, symbol: str = "🤖"):
@@ -138,8 +141,8 @@ class Ghost(Enemy):
 
         if(manhattan_distance(self.pos, level.player.pos) <= 1):
             self.think_cooldown = 2
-            return EnemyAction("TacklePlayer")
+            return EnemyAction("TackleEntity", target=level.player)
 
         move = astar_next_move(self.pos, level.player.pos, level)
-        if not move is None: return EnemyAction("Move", Vector2(move.y - self.pos.y, move.x - self.pos.x))
-        else: return EnemyAction("Idle", Vector2(0, 0))
+        if not move is None: return EnemyAction("Move", move=Vector2(move.y - self.pos.y, move.x - self.pos.x))
+        else: return EnemyAction("Idle")
