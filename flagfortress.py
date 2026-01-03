@@ -38,6 +38,8 @@ _previous_gamestate: Gamestate = Gamestate.MAIN_MENU
 _options_saved_volume = config.VOLUME
 stdscr = None
 
+HUD_HEIGHT = 10
+
 BUILTIN_LEVELS_SERIAL = bytearray(b"FF01LC\x00\x00\x00\x04\x00\x00\x06\x88//57ACIAbgBhAG0AZQAiADoAIAAiAEYAbABhAGcAIgAsACAAIgBhAHUAdABoAG8AcgAiADoAIAAiAFYAYQBkAHkAbQBEAG0AeQB0AHIAaQBpAGUAdgAiACwAIAAiAGQAZQBzAGMAcgBpAHAAdABpAG8AbgAiADoAIAAiAEIAdQBpAGwAdAAtAGkAbgAgAGwAZQB2AGUAbAAiACwAIAAiAHMAdABhAHIAdABpAG4AZwBfAHcAZQBhAHAAbwBuAF8AbgBhAG0AZQAiADoAIAAiAFAAaQBzAHQAbwBsACIALAAgACIAcwB0AGEAcgB0AGkAbgBnAF8AdwBlAGEAcABvAG4AXwBhAG0AbQBvACIAOgAgADQALAAgACIAcwB0AGEAcgB0AGkAbgBnAF8AdwBlAGEAcABvAG4AXwBhAG0AbQBvAF8AcgBlAHMAZQByAHYAZQAiADoAIAA0ACwAIAAiAHMAdABhAHIAdABpAG4AZwBfAGgAZQBhAGwAdABoACIAOgAgADQALAAgACIAcwB0AGEAcgB0AGkAbgBnAF8AYQByAG0AbwByACIAOgAgADAALAAgACIAbwBiAGoAZQBjAHQAcwAiADoAIABbAHsAIgB0AHkAcABlACIAOgAgACIAUwBwAGEAdwBuACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAANQAsACAAIgB4ACIAOgAgADUAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQBkADgAMwBkAFwAdQBkAGQAMAA1ACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIARgBsAGEAZwAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADUALAAgACIAeAAiADoAIAAxADQAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQBkADgAMwBkAFwAdQBkAGUAYQA5ACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIATABhAGIAZQBsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAAMgAsACAAIgB4ACIAOgAgADIAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAEwAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgAC0AMQAsACAAIgB0AGUAeAB0ACIAOgAgACIAVQBzAGUAIAB0AGgAZQAgAGEAcgByAG8AdwAgAGsAZQB5AHMAIAB0AG8AIABtAG8AdgBlACAAYQByAG8AdQBuAGQAXABuAEcAZQB0ACAAdABoAGUAIABmAGwAYQBnACAAYQBuAGQAIABiAHIAaQBuAGcAIABpAHQAIABiAGEAYwBrACAAdABvACAAcwBwAGEAdwBuACAAdABvACAAdwBpAG4AIgAsACAAIgB0AGUAeAB0AF8AYQB0AHQAcgAiADoAIAAwAH0AXQB9AA==\x00\x00\x00\x0c\xb8//57ACIAbgBhAG0AZQAiADoAIAAiAFcAYQBsAGwAcwAiACwAIAAiAGEAdQB0AGgAbwByACIAOgAgACIAVgBhAGQAeQBtAEQAbQB5AHQAcgBpAGkAZQB2ACIALAAgACIAZABlAHMAYwByAGkAcAB0AGkAbwBuACIAOgAgACIAQgB1AGkAbAB0AC0AaQBuACAAbABlAHYAZQBsACIALAAgACIAcwB0AGEAcgB0AGkAbgBnAF8AdwBlAGEAcABvAG4AXwBuAGEAbQBlACIAOgAgACIAUABpAHMAdABvAGwAIgAsACAAIgBzAHQAYQByAHQAaQBuAGcAXwB3AGUAYQBwAG8AbgBfAGEAbQBtAG8AIgA6ACAANAAsACAAIgBzAHQAYQByAHQAaQBuAGcAXwB3AGUAYQBwAG8AbgBfAGEAbQBtAG8AXwByAGUAcwBlAHIAdgBlACIAOgAgADQALAAgACIAcwB0AGEAcgB0AGkAbgBnAF8AaABlAGEAbAB0AGgAIgA6ACAANAAsACAAIgBzAHQAYQByAHQAaQBuAGcAXwBhAHIAbQBvAHIAIgA6ACAAMAAsACAAIgBvAGIAagBlAGMAdABzACIAOgAgAFsAewAiAHQAeQBwAGUAIgA6ACAAIgBTAHAAYQB3AG4AIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA1ACwAIAAiAHgAIgA6ACAANQB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1AGQAOAAzAGQAXAB1AGQAZAAwADUAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBGAGwAYQBnACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAANQAsACAAIgB4ACIAOgAgADEANAB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1AGQAOAAzAGQAXAB1AGQAZQBhADkAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAAMgAsACAAIgB4ACIAOgAgADEAMAB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIAYgAxAGIAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADMALAAgACIAeAAiADoAIAAxADAAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyAGIAMQBiACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAGYAYQBsAHMAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA0ACwAIAAiAHgAIgA6ACAAMQAwAH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgBiADEAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIABmAGEAbABzAGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAANQAsACAAIgB4ACIAOgAgADEAMAB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIAYgAxAGIAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADYALAAgACIAeAAiADoAIAAxADAAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyAGIAMQBiACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAGYAYQBsAHMAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA3ACwAIAAiAHgAIgA6ACAAMQAwAH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgBiADEAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIABmAGEAbABzAGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAAOAAsACAAIgB4ACIAOgAgADEAMAB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIAYgAxAGIAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlAH0AXQB9AA==\x00\x00\x00\x17`//57ACIAbgBhAG0AZQAiADoAIAAiAEIAcgBlAGEAawBhAGIAbABlACAAdwBhAGwAbABzACIALAAgACIAYQB1AHQAaABvAHIAIgA6ACAAIgBWAGEAZAB5AG0ARABtAHkAdAByAGkAaQBlAHYAIgAsACAAIgBkAGUAcwBjAHIAaQBwAHQAaQBvAG4AIgA6ACAAIgBCAHUAaQBsAHQALQBpAG4AIABsAGUAdgBlAGwAIgAsACAAIgBzAHQAYQByAHQAaQBuAGcAXwB3AGUAYQBwAG8AbgBfAG4AYQBtAGUAIgA6ACAAIgBQAGkAcwB0AG8AbAAiACwAIAAiAHMAdABhAHIAdABpAG4AZwBfAHcAZQBhAHAAbwBuAF8AYQBtAG0AbwAiADoAIAA0ACwAIAAiAHMAdABhAHIAdABpAG4AZwBfAHcAZQBhAHAAbwBuAF8AYQBtAG0AbwBfAHIAZQBzAGUAcgB2AGUAIgA6ACAANAAsACAAIgBzAHQAYQByAHQAaQBuAGcAXwBoAGUAYQBsAHQAaAAiADoAIAA0ACwAIAAiAHMAdABhAHIAdABpAG4AZwBfAGEAcgBtAG8AcgAiADoAIAAwACwAIAAiAG8AYgBqAGUAYwB0AHMAIgA6ACAAWwB7ACIAdAB5AHAAZQAiADoAIAAiAFMAcABhAHcAbgAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADUALAAgACIAeAAiADoAIAA1AH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAZAA4ADMAZABcAHUAZABkADAANQAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAEYAbABhAGcAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA1ACwAIAAiAHgAIgA6ACAAMQA0AH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAZAA4ADMAZABcAHUAZABlAGEAOQAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAAzACwAIAAiAHgAIgA6ACAAMQAyAH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgBiADEAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIABmAGEAbABzAGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAAMwAsACAAIgB4ACIAOgAgADEAMwB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIAYgAxAGIAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADMALAAgACIAeAAiADoAIAAxADQAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyAGIAMQBiACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAGYAYQBsAHMAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAAzACwAIAAiAHgAIgA6ACAAMQA1AH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgBiADEAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIABmAGEAbABzAGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAAMwAsACAAIgB4ACIAOgAgADEANgB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIAYgAxAGIAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADcALAAgACIAeAAiADoAIAAxADIAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyAGIAMQBiACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAGYAYQBsAHMAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA3ACwAIAAiAHgAIgA6ACAAMQAzAH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgBiADEAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIABmAGEAbABzAGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAANwAsACAAIgB4ACIAOgAgADEANAB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIAYgAxAGIAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADcALAAgACIAeAAiADoAIAAxADUAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyAGIAMQBiACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAGYAYQBsAHMAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA3ACwAIAAiAHgAIgA6ACAAMQA2AH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgBiADEAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIABmAGEAbABzAGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAANAAsACAAIgB4ACIAOgAgADEANgB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIAYgAxAGIAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADUALAAgACIAeAAiADoAIAAxADYAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyAGIAMQBiACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAGYAYQBsAHMAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA2ACwAIAAiAHgAIgA6ACAAMQA2AH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgBiADEAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIABmAGEAbABzAGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAANAAsACAAIgB4ACIAOgAgADEAMgB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIANQBmAGUAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAdAByAHUAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA1ACwAIAAiAHgAIgA6ACAAMQAyAH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgA1AGYAZQAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIAB0AHIAdQBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADYALAAgACIAeAAiADoAIAAxADIAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyADUAZgBlACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAHQAcgB1AGUAfQBdAH0A\x00\x00\x00\'\x98//57ACIAbgBhAG0AZQAiADoAIAAiAEEAIABHAGgAbwBzAHQAIQAiACwAIAAiAGEAdQB0AGgAbwByACIAOgAgACIAVgBhAGQAeQBtAEQAbQB5AHQAcgBpAGkAZQB2ACIALAAgACIAZABlAHMAYwByAGkAcAB0AGkAbwBuACIAOgAgACIAQgB1AGkAbAB0AC0AaQBuACAAbABlAHYAZQBsACIALAAgACIAcwB0AGEAcgB0AGkAbgBnAF8AdwBlAGEAcABvAG4AXwBuAGEAbQBlACIAOgAgACIAUABpAHMAdABvAGwAIgAsACAAIgBzAHQAYQByAHQAaQBuAGcAXwB3AGUAYQBwAG8AbgBfAGEAbQBtAG8AIgA6ACAANAAsACAAIgBzAHQAYQByAHQAaQBuAGcAXwB3AGUAYQBwAG8AbgBfAGEAbQBtAG8AXwByAGUAcwBlAHIAdgBlACIAOgAgADQALAAgACIAcwB0AGEAcgB0AGkAbgBnAF8AaABlAGEAbAB0AGgAIgA6ACAANAAsACAAIgBzAHQAYQByAHQAaQBuAGcAXwBhAHIAbQBvAHIAIgA6ACAAMAAsACAAIgBvAGIAagBlAGMAdABzACIAOgAgAFsAewAiAHQAeQBwAGUAIgA6ACAAIgBTAHAAYQB3AG4AIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA1ACwAIAAiAHgAIgA6ACAANQB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1AGQAOAAzAGQAXAB1AGQAZAAwADUAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBGAGwAYQBnACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAANQAsACAAIgB4ACIAOgAgADEAOAB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1AGQAOAAzAGQAXAB1AGQAZQBhADkAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBHAGgAbwBzAHQAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA1ACwAIAAiAHgAIgA6ACAAMQA0AH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAZAA4ADMAZABcAHUAZABjADcAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBoAGUAYQBsAHQAaAAiADoAIAAzACwAIAAiAGEAcgBtAG8AcgAiADoAIAAwACwAIAAiAGQAaQByAGUAYwB0AGkAbwBuACIAOgAgAHsAIgB5ACIAOgAgADAALAAgACIAeAAiADoAIAAxAH0ALAAgACIAaQBuAHYAdQBsAG4AZQByAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlACwAIAAiAHMAZQBsAGUAYwB0AGUAZABfAHcAZQBhAHAAbwBuAF8AaQBuAGQAZQB4ACIAOgAgADAALAAgACIAdwBlAGEAcABvAG4AcwAiADoAIABbAF0ALAAgACIAcwBwAGUAZQBkACIAOgAgADEALAAgACIAcwBwAGUAZQBkAF8AcgBhAG4AZABvAG0AXwBkAGUAdgBpAGEAdABpAG8AbgAiADoAIAAwAC4AMgA1ACwAIAAiAGEAaQBfAGQAaQBzAGEAYgBsAGUAZAAiADoAIABmAGEAbABzAGUALAAgACIAdABoAGkAbgBrAF8AYwBvAG8AbABkAG8AdwBuACIAOgAgADAALAAgACIAcwB0AHIAZQBuAGcAdABoACIAOgAgADEAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAAMwAsACAAIgB4ACIAOgAgADEAMgB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIAYgAxAGIAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADMALAAgACIAeAAiADoAIAAxADMAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyAGIAMQBiACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAGYAYQBsAHMAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAAzACwAIAAiAHgAIgA6ACAAMQA0AH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgBiADEAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIABmAGEAbABzAGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAAMwAsACAAIgB4ACIAOgAgADEANQB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIAYgAxAGIAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADMALAAgACIAeAAiADoAIAAxADYAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyAGIAMQBiACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAGYAYQBsAHMAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAAzACwAIAAiAHgAIgA6ACAAMQA3AH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgBiADEAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIABmAGEAbABzAGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAAMwAsACAAIgB4ACIAOgAgADEAOAB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIAYgAxAGIAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADMALAAgACIAeAAiADoAIAAxADkAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyAGIAMQBiACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAGYAYQBsAHMAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAAzACwAIAAiAHgAIgA6ACAAMgAwAH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgBiADEAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIABmAGEAbABzAGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAANwAsACAAIgB4ACIAOgAgADEAMgB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIAYgAxAGIAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADcALAAgACIAeAAiADoAIAAxADMAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyAGIAMQBiACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAGYAYQBsAHMAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA3ACwAIAAiAHgAIgA6ACAAMQA0AH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgBiADEAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIABmAGEAbABzAGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAANwAsACAAIgB4ACIAOgAgADEANQB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIAYgAxAGIAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADcALAAgACIAeAAiADoAIAAxADYAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyAGIAMQBiACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAGYAYQBsAHMAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA3ACwAIAAiAHgAIgA6ACAAMQA3AH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgBiADEAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIABmAGEAbABzAGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAANwAsACAAIgB4ACIAOgAgADEAOAB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIAYgAxAGIAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADcALAAgACIAeAAiADoAIAAxADkAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyAGIAMQBiACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAGYAYQBsAHMAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA3ACwAIAAiAHgAIgA6ACAAMgAwAH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgBiADEAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIABmAGEAbABzAGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAANAAsACAAIgB4ACIAOgAgADIAMAB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIAYgAxAGIAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAZgBhAGwAcwBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADUALAAgACIAeAAiADoAIAAyADAAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyAGIAMQBiACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAGYAYQBsAHMAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA2ACwAIAAiAHgAIgA6ACAAMgAwAH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgBiADEAYgAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIABmAGEAbABzAGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAANAAsACAAIgB4ACIAOgAgADEAMgB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIANQBmAGUAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAdAByAHUAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA1ACwAIAAiAHgAIgA6ACAAMQAyAH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgA1AGYAZQAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIAB0AHIAdQBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADYALAAgACIAeAAiADoAIAAxADIAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyADUAZgBlACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAHQAcgB1AGUAfQAsACAAewAiAHQAeQBwAGUAIgA6ACAAIgBXAGEAbABsACIALAAgACIAcABvAHMAIgA6ACAAewAiAHkAIgA6ACAANAAsACAAIgB4ACIAOgAgADEANgB9ACwAIAAiAHMAeQBtAGIAbwBsACIAOgAgACIAXAB1ADIANQBmAGUAIgAsACAAIgBoAGkAZABkAGUAbgAiADoAIABmAGEAbABzAGUALAAgACIAbwByAGQAZQByACIAOgAgADAALAAgACIAYgByAGUAYQBrAGEAYgBsAGUAIgA6ACAAdAByAHUAZQB9ACwAIAB7ACIAdAB5AHAAZQAiADoAIAAiAFcAYQBsAGwAIgAsACAAIgBwAG8AcwAiADoAIAB7ACIAeQAiADoAIAA1ACwAIAAiAHgAIgA6ACAAMQA2AH0ALAAgACIAcwB5AG0AYgBvAGwAIgA6ACAAIgBcAHUAMgA1AGYAZQAiACwAIAAiAGgAaQBkAGQAZQBuACIAOgAgAGYAYQBsAHMAZQAsACAAIgBvAHIAZABlAHIAIgA6ACAAMAAsACAAIgBiAHIAZQBhAGsAYQBiAGwAZQAiADoAIAB0AHIAdQBlAH0ALAAgAHsAIgB0AHkAcABlACIAOgAgACIAVwBhAGwAbAAiACwAIAAiAHAAbwBzACIAOgAgAHsAIgB5ACIAOgAgADYALAAgACIAeAAiADoAIAAxADYAfQAsACAAIgBzAHkAbQBiAG8AbAAiADoAIAAiAFwAdQAyADUAZgBlACIALAAgACIAaABpAGQAZABlAG4AIgA6ACAAZgBhAGwAcwBlACwAIAAiAG8AcgBkAGUAcgAiADoAIAAwACwAIAAiAGIAcgBlAGEAawBhAGIAbABlACIAOgAgAHQAcgB1AGUAfQBdAH0A\x00")
 BUILTIN_LEVELS: list[GameLevel] = []
 
@@ -79,7 +81,7 @@ MENUS = {
         ["options_set_max_fps", f"Target FPS ({config.TARGET_FPS})"],
         ["options_set_volume", f"Volume ({config.VOLUME})"],
         ["options_set_show_fps", f"Display FPS ({config.DEBUG})"],
-        ["options_set_debug", f"Debug Mode ({config.DEBUG})"],
+        #["options_set_debug", f"Debug Mode ({config.DEBUG})"],
         ["back", "Back"]
     ]),
     "Options_Target_Tickrate": Menu(Vector2(10, 36), "Target Tickrate", "Current value: ", [
@@ -124,7 +126,7 @@ MENUS = {
     "Winscreen_Custom": Menu(Vector2(20, 64), "", BIG_TEXT["YOU WIN"], [
         ["to_mainmenu", "To Main Menu"]
     ]),
-    "Losescreen": Menu(Vector2(20, 70), "", BIG_TEXT["YOU LOSE"], [
+    "Losescreen": Menu(Vector2(16, 70), "", BIG_TEXT["YOU LOSE"], [
         ["try_again", "Try again"],
         ["to_mainmenu", "To Main Menu"]
     ]),
@@ -132,17 +134,18 @@ MENUS = {
 }
 
 MENUS["MainMenu"].options_offset = Vector2(6, 0)
-MENUS["Winscreen"].options_offset = Vector2(8, 0)
+MENUS["Winscreen"].options_offset = Vector2(4, 0)
 MENUS["Winscreen_Custom"].options_offset = Vector2(8, 0)
 MENUS["Options_Max_FPS"].options_offset = Vector2(1, 0)
 MENUS["Options_Volume"].options_offset = Vector2(1, 0)
-MENUS["Losescreen"].options_offset = Vector2(8, 0)
+MENUS["Losescreen"].options_offset = Vector2(3, 0)
 
 menu: Menu = None
 campaign_level: int = 0
 level: GameLevel = None
 level_time: float = 0
-level_score_additive: int = 0 
+level_score_additive: int = 0
+camera_pos: Vector2 = Vector2(0, 0)
 event_queue = queue.SimpleQueue()
 saved_events = []
 
@@ -166,7 +169,7 @@ def load_sounds(root: str = "snd"):
                 continue
 
             full_path = os.path.join(dirpath, name)
-            key = os.path.relpath(full_path, root)[:-4]  # remove ".wav"
+            key = os.path.relpath(full_path, root)[:-4] # remove ".wav"
 
             _sound_cache[key] = pygame.mixer.Sound(full_path)
 
@@ -252,34 +255,24 @@ def render_fps():
     stdscr.addstr(2, _screensize.x - 16, f"FPS: {get_fps()}     ")
 
 def render_hud():
+    global HUD_HEIGHT
+    global _screensize
     if(level is None or level.player is None): return
+    render_frame(Vector2(0, 0), Vector2(HUD_HEIGHT, _screensize.x-1))
     stdscr.addstr(4, 3, f"HP: {level.player.health}")
     stdscr.addstr(7, 3, f"Level: {level.name}")
     stdscr.addstr(8, 3, "Get the flag and bring it back to spawn")
 
-def render_debug():
-    global _registered_events
-    global _screensize
-
-    for i in range(_screensize.y - (config.LEVEL_SCREEN_OFFSET_Y + config.LEVEL_HEIGHT + 4)):
-        stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y + config.LEVEL_HEIGHT + 3 + i, 3, " " * 60)
-
-    stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y + config.LEVEL_HEIGHT + 2, 3, "GameObjects")
-    for i in range(len(level.objects)):
-        obj = level.objects[i]
-        stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y + config.LEVEL_HEIGHT + 3 + i, 3, obj.type + str(obj.pos))
-    
-    stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y + config.LEVEL_HEIGHT + 2, 40, "Events")
-    for i in range(len(_registered_events)):
-        e = _registered_events[i]
-        stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y + config.LEVEL_HEIGHT + 3 + i, 40, f"{'%.1f' % e[1]}: {e[0].name}")
-
 def render_frame(pos: Vector2, size: Vector2, symbol: str = '#', symbol_attr: int = 0):
-    stdscr.addstr(pos.y, pos.x, symbol * size.x, symbol_attr)
-    stdscr.addstr(pos.y + size.y, pos.x, symbol * size.x, symbol_attr)
+    try: stdscr.addstr(pos.y, pos.x, symbol * size.x, symbol_attr)
+    except: pass
+    try: stdscr.addstr(pos.y + size.y, pos.x, symbol * size.x, symbol_attr)
+    except: pass
     for i in range(size.y+1):
-        stdscr.addch(pos.y + i, pos.x, symbol, symbol_attr)
-        stdscr.addch(pos.y + i, pos.x + size.x, symbol, symbol_attr)
+        try: stdscr.addch(pos.y + i, pos.x, symbol, symbol_attr)
+        except: pass
+        try: stdscr.addch(pos.y + i, pos.x + size.x, symbol, symbol_attr)
+        except: pass
 
 def render_window_frame(symbol: str = '.'):
     global _screensize
@@ -290,12 +283,13 @@ def render_window_frame(symbol: str = '.'):
         pass
 
 def render_level_frame(symbol: str = '#', symbol_attr: int = 0):
-    render_frame(Vector2(config.LEVEL_SCREEN_OFFSET_Y-1, config.LEVEL_SCREEN_OFFSET_X-1), Vector2(config.LEVEL_HEIGHT+2, config.LEVEL_WIDTH*2+3), symbol, symbol_attr)
+    global HUD_HEIGHT
+    global _screensize
 
-def initial_ingame_render():
-    render_window_frame()
-    render_hud()
-    render_level_frame()
+    viewport_pos = Vector2(HUD_HEIGHT+1, 1)
+    viewport_size = _screensize.add(-HUD_HEIGHT-3, -2)
+
+    render_frame(Vector2(viewport_pos.y-1, viewport_pos.x-1), Vector2(viewport_size.y+2, viewport_size.x+1), symbol, symbol_attr)
 
 def render_menu(menu: Menu, pos: Vector2):
     global _screensize
@@ -313,57 +307,112 @@ def render_menu(menu: Menu, pos: Vector2):
     
     max_option_len = len(menu.options[0][1]) if len(menu.options[0]) > 0 else 0
     option_count = len(menu.options)
-    for i in range(len(menu.options)):
+    for i in range(len(menu.options)-1):
         option = menu.options[i]
         stdscr.addstr(menu.options_offset.y + math.floor(pos.y - math.floor(option_count/2)) + i, menu.options_offset.x + math.floor(pos.x - len(option[1])/2), f" {option[1]} ")
         max_option_len = max(max_option_len, len(option[1]))
     
+    last_option = menu.options[-1]
+    stdscr.addstr(menu.options_offset.y + math.floor(pos.y - math.floor(option_count/2)) + len(menu.options), menu.options_offset.x + math.floor(pos.x - len(last_option[1])/2), f" {last_option[1]} ")
+    max_option_len = max(max_option_len, len(last_option[1]))
+    
     if len(menu.options) > 0:
-        stdscr.addch(menu.options_offset.y + math.floor(pos.y - math.floor(option_count/2)) + menu.selected_option, menu.options_offset.x + math.floor(pos.x - max_option_len/2)-2, '>')
+        stdscr.addch(menu.options_offset.y + math.floor(pos.y - math.floor(option_count/2)) + menu.selected_option + (1 if menu.selected_option == len(menu.options)-1 else 0), menu.options_offset.x + math.floor(pos.x - max_option_len/2)-2, '>')
 
 def render_current_menu():
     global menu
     render_menu(menu, Vector2(_screensize.y / 2, _screensize.x / 2))
 
+def level_coords_to_matrix(pos_in: Vector2):
+    global camera_pos
+    global _screensize
+    viewport_size = _screensize.add(-HUD_HEIGHT-2, -2)
+    viewport_size_half = viewport_size.mul(0.5)
+    
+    pos = pos_in.copy()
+    pos.y = pos.y - camera_pos.y + viewport_size_half.y
+    pos.x = pos.x*2 - camera_pos.x * 2 + viewport_size_half.x
+    return pos
+
+def matrix_coords_to_level(pos_in: Vector2):
+    global camera_pos
+    global _screensize
+    viewport_size = _screensize.add(-HUD_HEIGHT-2, -2)
+    viewport_size_half = viewport_size.mul(0.5)
+
+    pos = pos_in.copy()
+    pos.y = pos.y + camera_pos.y - viewport_size_half.y
+    pos.x = math.floor((pos.x - viewport_size_half.x + camera_pos.x * 2)/2)
+    return pos
+
 def render_ingame_matrix():
     global stdscr
+    global HUD_HEIGHT
+    global camera_pos
+    global _screensize
 
+    viewport_pos = Vector2(HUD_HEIGHT+1, 1)
+    viewport_size = _screensize.add(-HUD_HEIGHT-2, -2)
+    viewport_size_half = viewport_size.mul(0.5)
+
+    OUT_OF_BOUNDS = '·'
     AIR = ' '
 
     render_matrix = []
-    for i in range(config.LEVEL_HEIGHT+1):
+    for i in range(viewport_size.y):
         row = []
-        for i in range(config.LEVEL_WIDTH*2+2): row.append(AIR)
+        for j in range(viewport_size.x):
+            global_pos = matrix_coords_to_level(Vector2(i, j))
+            if 0 <= global_pos.y < level.size.y and 0 <= global_pos.x < level.size.x:
+                row.append(AIR)
+            else:
+                row.append(OUT_OF_BOUNDS if -1 <= global_pos.y <= level.size.y and (-1 <= global_pos.x <= level.size.x and j % 2 == 0) else AIR)
         render_matrix.append(row)
     
     for obj in level.objects:
         if(obj.hidden): continue
+        matrix_pos = level_coords_to_matrix(obj.pos)
+        oy = matrix_pos.y
+        ox = matrix_pos.x
+
         if(obj.type == "Label"):
             lines = obj.text.split('\n')
             for i in range(len(lines)):
                 line = lines[i]
+                char_y = oy+i 
                 for j in range(len(line)):
-                    render_matrix[obj.pos.y+i][obj.pos.x*2+j] = line[j]
-
+                    char_x = ox+j
+                    if not(0 < char_y < len(render_matrix) and
+                           0 < char_x < len(render_matrix[char_y])): continue
+                    render_matrix[char_y][char_x] = line[j]
             continue
 
-        if((not 0 <= obj.pos.y <= config.LEVEL_HEIGHT) or (not 0 <= obj.pos.x <= config.LEVEL_WIDTH)): continue
+        # frustum culling
+        if not((0 < oy < viewport_size.y) and
+               (0 < ox < viewport_size.x)): continue
 
+        # projectiles have subpos rendering on the X axis
         if(issubclass(type(obj), Projectile)):
             sp = round(obj.subpos.x)
-            if 0 <= obj.pos.x*2 + sp <= config.LEVEL_WIDTH*2+1:
-                if render_matrix[obj.pos.y][obj.pos.x*2 + sp] == '' or ord(render_matrix[obj.pos.y][obj.pos.x*2]) > 255:
+            if 0 <= ox + sp < viewport_size.x:
+                if render_matrix[oy][ox + sp] == '' or ord(render_matrix[oy][ox]) > 255:
                     sp = 0
-                render_matrix[obj.pos.y][obj.pos.x*2 + sp] = obj.symbol
+                render_matrix[oy][ox + sp] = obj.symbol
+                if render_matrix[oy][ox + sp + 1] == '': render_matrix[oy][ox + sp + 1] = AIR
         else:
-            render_matrix[obj.pos.y][obj.pos.x*2] = obj.symbol
-        if(ord(obj.symbol) > 255): render_matrix[obj.pos.y][obj.pos.x*2+1] = ''
-        else:
-            if(render_matrix[obj.pos.y][obj.pos.x*2+1] == ''): render_matrix[obj.pos.y][obj.pos.x*2+1] = AIR
+            if(ord(obj.symbol) < 255 or ox <= viewport_size.x-2):
+                render_matrix[oy][ox] = obj.symbol
+
+        # edge case for emoji symbol on the right edge of the viewport
+        if ox < viewport_size.x-1:
+            if ord(obj.symbol) > 255:
+                render_matrix[oy][ox+1] = ''
+            else:
+                if(render_matrix[oy][ox] == ''): render_matrix[oy][ox+1] = AIR
     
     for i in range(len(render_matrix)):
         row = render_matrix[i]
-        stdscr.addstr(config.LEVEL_SCREEN_OFFSET_Y + i, config.LEVEL_SCREEN_OFFSET_X, ''.join(row))
+        stdscr.addstr(viewport_pos.y + i, viewport_pos.x, ''.join(row))
 
 def render_clear():
     global stdscr
@@ -380,9 +429,9 @@ def render():
     _screensize = new_screensize
 
     if(_gamestate in (Gamestate.INGAME, Gamestate.INGAME_CUSTOM)):
+        render_hud()
+        render_level_frame()
         render_ingame_matrix()
-        if(config.DEBUG): render_debug()
-
     else:
         render_current_menu()
     
@@ -419,7 +468,7 @@ def move_object(a: GameObject, move: Vector2):
 
     if move.x != 0:
         for i in range(sign(move.x), move.x + sign(move.x), sign(move.x)):
-            if(a.pos.x + i > config.LEVEL_WIDTH or a.pos.x + i < 0):
+            if 0 > a.pos.x + i >= level.size.x:
                 if(a.type == "Player"): break
                 else:
                     level.delete_object(a)
@@ -436,7 +485,7 @@ def move_object(a: GameObject, move: Vector2):
     
     if move.y != 0:
         for i in range(sign(move.y), move.y + sign(move.y), sign(move.y)):
-            if(a.pos.y + i > config.LEVEL_HEIGHT or a.pos.y + i < 0):
+            if 0 > a.pos.y + i >= level.size.y:
                 if(a.type == "Player"): break
                 else:
                     level.delete_object(a)
@@ -458,6 +507,7 @@ def change_gamestate(gamestate: Gamestate):
     global _previous_gamestate
     if(gamestate == Gamestate.MAIN_MENU):
         render_clear()
+        render_window_frame()
         level = None
         menu = MENUS["MainMenu"]
     elif(gamestate == Gamestate.OPTIONS):
@@ -468,7 +518,6 @@ def change_gamestate(gamestate: Gamestate):
         menu = None
         render_clear()
         render_level_frame()
-        render_window_frame()
         render_hud()
     elif(gamestate == Gamestate.INGAME_CUSTOM):
         menu = None
@@ -514,6 +563,7 @@ def process_menu_action(action: str):
         if(_gamestate == Gamestate.INGAME_PAUSED): fire_event("Unpause")
         elif(_gamestate == Gamestate.MAIN_MENU and menu == MENUS["LevelSelection"]):
             render_clear()
+            render_window_frame()
             menu = MENUS["MainMenu"]
         elif(_gamestate == Gamestate.OPTIONS):
             config.VOLUME = _options_saved_volume
@@ -575,8 +625,8 @@ def tick():
     global saved_events
     global campaign_level
     global _deltatime
-    global level_time
-    global level_score_additive
+    global level_time, level_score_additive
+    global camera_pos
 
     if(_gamestate in (Gamestate.INGAME, Gamestate.INGAME_CUSTOM)):
         level_time += _deltatime
@@ -586,6 +636,10 @@ def tick():
 
         for projectile in [projectile for projectile in level.objects if issubclass(type(projectile), Projectile)]:
             if projectile.deleted: continue
+            projectile.lifetime -= _deltatime
+            if(projectile.lifetime <= 0): 
+                level.delete_object(projectile)
+                continue
             projectile.subpos = projectile.subpos.add(projectile.direction.y * projectile.speed * _deltatime, projectile.direction.x * projectile.speed * _deltatime)
             move = Vector2(math.floor(projectile.subpos.y) if sign(projectile.subpos.y) == 1 else math.ceil(projectile.subpos.y),
                            math.floor(projectile.subpos.x) if sign(projectile.subpos.x) == 1 else math.ceil(projectile.subpos.x))
@@ -626,7 +680,7 @@ def tick():
 
         elif(e.name == "InitializeLevel"):
             stdscr.clear()
-            initial_ingame_render()
+            camera_pos = level.player.pos.copy()
 
         elif(e.name == "PlayerShoot"):
             selected_weapon = (None if (level.player.selected_weapon_index == -1 or len(level.player.weapons) == 0)
@@ -707,6 +761,7 @@ def tick():
         elif(e.name == "PlayerMove"):
             level.player.direction = Vector2F.from_Vector2(e.params.normalize())
             move_object(level.player, e.params)
+            camera_pos = level.player.pos.copy()
         
         elif(e.name == "PlayerHurtFlashOver"):
             render_level_frame('#')

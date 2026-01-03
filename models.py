@@ -295,11 +295,12 @@ class Hazard(GameObject):
         return obj
 
 class Projectile(GameObject):
-    def __init__(self, pos: Vector2, direction: Vector2, symbol: str = "+", speed: float = 5):
+    def __init__(self, pos: Vector2, direction: Vector2, symbol: str = "+", speed: float = 5, lifetime: float = 10):
         GameObject.__init__(self, pos, symbol)
         self.subpos = Vector2F(0, 0)
         self.direction = direction.normalize()
         self.speed = speed
+        self.lifetime = lifetime
     
     @staticmethod
     def from_parent(obj: GameObject, direction: Vector2, symbol: str = "+", speed: float = 5) -> "Projectile":
@@ -349,6 +350,8 @@ class Event:
         self.initial_delay = self.delay
 
 class GameLevel:
+    default_size = Vector2(11, 30)
+
     def __init__(self, name: str = "Level", objects: list[GameObject] = []):
         self.name = name
         self.author = 'VadymDmytriiev'
@@ -364,6 +367,7 @@ class GameLevel:
         self.objects = objects[:]
         self.objects_to_load = None
         self.current_spawn_index = 0
+        self.size = GameLevel.default_size.copy()
 
     def copy(self):
         level = GameLevel()
@@ -381,6 +385,7 @@ class GameLevel:
         level.original = self
         level.objects_to_load = self.objects_to_load
         level.current_spawn_index = self.current_spawn_index
+        level.size = self.size.copy()
         return level
     
     @property
@@ -432,6 +437,7 @@ class GameLevel:
         data["starting_armor"] = self.starting_armor
         data["starting_score"] = self.starting_score
         data["max_score"] = self.max_score
+        data["size"] = self.size.serialize()
         data["objects"] = [obj.serialize() for obj in self.objects]
         return data
 
@@ -449,6 +455,7 @@ class GameLevel:
         obj.objects_to_load = data["objects"]
         obj.starting_score = data.get("starting_score", 100)
         obj.max_score = data.get("max_score", 100)
+        obj.size = data.get("size", GameLevel.default_size.copy())
         return obj
     
 class Menu:
