@@ -135,7 +135,8 @@ class ItemPickup(GameObject):
 
     @staticmethod
     def from_parent(obj: GameObject,) -> "ItemPickup":
-        return ItemPickup(pos=obj.pos, symbol=obj.symbol)
+        me = ItemPickup(pos=obj.pos, symbol=obj.symbol)
+        return me
     
     def serialize(self) -> dict:
         data = super().serialize()
