@@ -21,7 +21,9 @@ import level_sideloading
 _sound_cache = {}
 _quit: bool = False
 _frametime: float = 1
+_frametimes: list[float] = []
 _deltatime: float = 1
+_deltatimes: list[float] = []
 _lifetime: float = 0
 _registered_events = []
 _screensize: Vector2 = Vector2(10, 10)
@@ -80,7 +82,8 @@ MENUS = {
         ["options_set_target_tickrate", f"Target Tickrate ({config.TARGET_TICKRATE})"],
         ["options_set_max_fps", f"Target FPS ({config.TARGET_FPS})"],
         ["options_set_volume", f"Volume ({config.VOLUME})"],
-        ["options_set_show_fps", f"Display FPS ({config.DEBUG})"],
+        ["options_set_show_fps", f"Display FPS ({config.DISPLAY_FPS})"],
+        ["options_set_show_tps", f"Display TPS ({config.DISPLAY_TPS})"],
         #["options_set_debug", f"Debug Mode ({config.DEBUG})"],
         ["back", "Back"]
     ]),
@@ -208,7 +211,6 @@ def handle_input():
         elif(c == "KEY_RIGHT"): fire_event("PlayerMove", params = Vector2(0, 1))
         elif(c == "KEY_UP"): fire_event("PlayerMove", params = Vector2(-1, 0))
         elif(c == "KEY_DOWN"): fire_event("PlayerMove", params = Vector2(1, 0))
-        elif(c.lower() == "m"): fire_event("ToMainMenu")
         elif(c.lower() == "c"): fire_event("PlayerDash")
         elif(c.lower() == "f"): fire_event("PlayerShoot")
         elif(c.lower() == "p"): fire_event("Pause")
@@ -248,11 +250,24 @@ def play_level(lvl: GameLevel):
     fire_event("InitializeLevel")
 
 def get_fps():
-    return round(1.0 / _frametime)
+    global _frametimes
+    avg_frametime = sum(_frametimes) / (float(len(_frametimes) if len(_frametimes) > 0 else 1))
+    if(avg_frametime == 0): avg_frametime = 1
+    return round(1.0 / avg_frametime)
+
+def get_tps():
+    global _deltatimes
+    avg_deltatime = sum(_deltatimes) / (float(len(_deltatimes) if len(_deltatimes) > 0 else 1))
+    if(avg_deltatime == 0): avg_deltatime = 1
+    return round(1.0 / avg_deltatime)
 
 def render_fps():
     global _screensize
-    stdscr.addstr(2, _screensize.x - 16, f"FPS: {get_fps()}     ")
+    stdscr.addstr(_screensize.y - 2, _screensize.x - 13, f"FPS: {get_fps()}  ")
+
+def render_tps():
+    global _screensize
+    stdscr.addstr(_screensize.y - 3, _screensize.x - 13, f"TPS: {get_tps()}  ")
 
 def render_hud():
     global HUD_HEIGHT
@@ -436,6 +451,7 @@ def render():
         render_current_menu()
     
     if(config.DISPLAY_FPS): render_fps()
+    if(config.DISPLAY_TPS): render_tps()
 
 def on_collide(a: GameObject, b: GameObject):
     if(_gamestate == Gamestate.INGAME_PAUSED): return False
@@ -613,8 +629,12 @@ def process_menu_action(action: str):
         [option for option in MENUS["Options"].options if option[0] == "options_set_debug"][0][1] = f"Debug Mode ({config.DEBUG})"
     elif(action == "options_set_show_fps"):
         config.DISPLAY_FPS = not config.DISPLAY_FPS
-        if not config.DISPLAY_FPS: stdscr.addstr(2, _screensize.x - 16, f"          ")
+        if not config.DISPLAY_FPS: stdscr.addstr(_screensize.y - 2, _screensize.x - 13, "         ")
         [option for option in MENUS["Options"].options if option[0] == "options_set_show_fps"][0][1] = f"Display FPS ({config.DISPLAY_FPS})"
+    elif(action == "options_set_show_tps"):
+        config.DISPLAY_TPS = not config.DISPLAY_TPS
+        if not config.DISPLAY_TPS: stdscr.addstr(_screensize.y - 3, _screensize.x - 13, "         ")
+        [option for option in MENUS["Options"].options if option[0] == "options_set_show_tps"][0][1] = f"Display TPS ({config.DISPLAY_TPS})"
     elif(action == "quit"): _quit = True
 
 def tick():
@@ -798,35 +818,38 @@ def main(stdscr_in):
     load_sounds()
     BUILTIN_LEVELS = level_sideloading.load_levels(BUILTIN_LEVELS_SERIAL)
 
-    last_time = time.time_ns() / (10 ** 9)
-    last_tick_time = time.time_ns() / (10 ** 9)
+    last_time = time.perf_counter()
+    last_tick_time = time.perf_counter()
     accumulator = 0
 
     change_gamestate(Gamestate.MAIN_MENU)
     while True:
-        newtime = time.time_ns() / (10 ** 9)
-        _frametime = newtime - last_time
+        frame_start = time.perf_counter()
         _lifetime += _frametime
-        accumulator += _frametime
-        last_time = newtime
+        last_time = frame_start
         handle_input()
-
-        if(accumulator >= config.TARGET_TIME_PER_TICK * 10):
-            accumulator = config.TARGET_TIME_PER_TICK
-        
         while (accumulator >= config.TARGET_TIME_PER_TICK):
-            _deltatime = time.time_ns() / (10 ** 9) - last_tick_time
+            _deltatime = time.perf_counter() - last_tick_time
+            if(len(_deltatimes) > 1000): _deltatimes.clear()
+            _deltatimes.append(_deltatime)
             tick()
-            last_tick_time = time.time_ns() / (10 ** 9)
+            last_tick_time = time.perf_counter()
             accumulator -= config.TARGET_TIME_PER_TICK
         render()
 
         if(_screensize.y < 20 or _screensize.x < 76): return 1
-
         if _quit: break
 
-        if(_frametime < config.TARGET_FRAMETIME): time.sleep(config.TARGET_FRAMETIME)
-    
+        _frametime = time.perf_counter() - frame_start
+        if(len(_frametimes) > 1000): _frametimes.clear()
+        if(config.TARGET_FRAMETIME > _frametime):
+            _frametimes.append(config.TARGET_FRAMETIME)
+            time.sleep(config.TARGET_FRAMETIME - _frametime)
+            accumulator += config.TARGET_FRAMETIME
+        else:
+            _frametimes.append(_frametime)
+            accumulator += _frametime
+
     return 0
 
 retcode = curses.wrapper(main)
