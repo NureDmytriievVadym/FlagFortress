@@ -84,7 +84,7 @@ MENUS = {
         ["options_set_volume", f"Volume ({config.VOLUME})"],
         ["options_set_show_fps", f"Display FPS ({config.DISPLAY_FPS})"],
         ["options_set_show_tps", f"Display TPS ({config.DISPLAY_TPS})"],
-        #["options_set_debug", f"Debug Mode ({config.DEBUG})"],
+        ["options_set_debug", f"Debug Mode ({config.DEBUG})"],
         ["back", "Back"]
     ]),
     "Options_Target_Tickrate": Menu(Vector2(10, 36), "Target Tickrate", "Current value: ", [
@@ -138,7 +138,7 @@ MENUS = {
 
 MENUS["MainMenu"].options_offset = Vector2(6, 0)
 MENUS["Winscreen"].options_offset = Vector2(4, 0)
-MENUS["Winscreen_Custom"].options_offset = Vector2(8, 0)
+MENUS["Winscreen_Custom"].options_offset = Vector2(6, 0)
 MENUS["Options_Max_FPS"].options_offset = Vector2(1, 0)
 MENUS["Options_Volume"].options_offset = Vector2(1, 0)
 MENUS["Losescreen"].options_offset = Vector2(3, 0)
@@ -213,6 +213,7 @@ def handle_input():
         elif(c == "KEY_DOWN"): fire_event("PlayerMove", params = Vector2(1, 0))
         elif(c.lower() == "c"): fire_event("PlayerDash")
         elif(c.lower() == "f"): fire_event("PlayerShoot")
+        elif(c.lower() == "k" and config.DEBUG): fire_event("TestEvent")
         elif(c.lower() == "p"): fire_event("Pause")
     else:
         if(c == "KEY_UP"): fire_event("MoveMenuOption", params = -1)
@@ -233,6 +234,7 @@ def play_level(lvl: GameLevel):
     global level
     global level_time
     global level_score_additive
+    if lvl.failed_to_load: return False
     level = lvl.copy()
     level_score_additive = 0
     level_time = 0
@@ -248,6 +250,7 @@ def play_level(lvl: GameLevel):
         level.player.selected_weapon_index = 0
 
     fire_event("InitializeLevel")
+    return True
 
 def get_fps():
     global _frametimes
@@ -413,7 +416,7 @@ def render_ingame_matrix():
                 if render_matrix[oy][ox + sp] == '' or ord(render_matrix[oy][ox]) > 255:
                     sp = 0
                 render_matrix[oy][ox + sp] = obj.symbol
-                if render_matrix[oy][ox + sp + 1] == '': render_matrix[oy][ox + sp + 1] = AIR
+                if ox + sp + 1 < viewport_size.x and render_matrix[oy][ox + sp + 1] == '': render_matrix[oy][ox + sp + 1] = AIR
         else:
             if(ord(obj.symbol) < 255 or ox <= viewport_size.x-2):
                 render_matrix[oy][ox] = obj.symbol
@@ -554,9 +557,8 @@ def process_menu_action(action: str):
     global campaign_level
     global _previous_gamestate
     if(action == "play_builtin"):
-        change_gamestate(Gamestate.INGAME)
         campaign_level = 0
-        play_level(BUILTIN_LEVELS[campaign_level])
+        if play_level(BUILTIN_LEVELS[campaign_level]): change_gamestate(Gamestate.INGAME)
     elif(action == "play_custom"):
         menu = MENUS["LevelSelection"]
         menu.options.clear()
@@ -568,9 +570,8 @@ def process_menu_action(action: str):
         change_gamestate(_previous_gamestate)
         play_level(level.original)
     elif(action.startswith("select_level_")):
-        change_gamestate(Gamestate.INGAME_CUSTOM)
         lv_num = int(action.split('_')[-1])
-        play_level(level_sideloading.loaded_levels[lv_num])
+        if play_level(level_sideloading.loaded_levels[lv_num]): change_gamestate(Gamestate.INGAME_CUSTOM)
     elif(action == "open_options"):
         change_gamestate(Gamestate.OPTIONS)
         _options_saved_volume = config.VOLUME
@@ -592,8 +593,8 @@ def process_menu_action(action: str):
         change_gamestate(Gamestate.MAIN_MENU)
     elif(action == "next_level"):
         campaign_level += 1
-        change_gamestate(Gamestate.INGAME)
-        play_level(BUILTIN_LEVELS[campaign_level])
+        if play_level(BUILTIN_LEVELS[campaign_level]): change_gamestate(Gamestate.INGAME)
+        else: change_gamestate(Gamestate.MAIN_MENU)
     elif(action == "options_set_target_tickrate"):
         menu = MENUS["Options_Target_Tickrate"]
         menu.description = f"Current Value: {config.TARGET_TICKRATE}"
@@ -668,14 +669,28 @@ def tick():
                 projectile.subpos = projectile.subpos.add(-move.y, -move.x)
                 move_object(projectile, move)
 
-        for enemy in [enemy for enemy in level.objects if issubclass(type(enemy), Enemy) and not enemy.ai_disabled]:
-            if enemy.deleted: continue
-            decision = enemy.think(level, _deltatime)
-            if decision is None: continue
-            if(decision.action == "Move"):
-                fire_event("EntityMove", params=(enemy, decision.move))
-            elif(decision.action == "TackleEntity"):
-                fire_event("EntityTackleEntity", params=(enemy, decision.target))  
+        for entity in [entity for entity in level.objects if issubclass(type(entity), Entity)]:
+            if entity.deleted: continue
+
+            selected_weapon: BaseWeapon = (None if (entity.selected_weapon_index == -1 or len(entity.weapons) == 0)
+                                                else entity.weapons[entity.selected_weapon_index])
+
+            if not selected_weapon is None:
+                selected_weapon.shooting_time_left = max(0, selected_weapon.shooting_time_left - _deltatime)
+                if selected_weapon.reloading_time_left > 0 and selected_weapon.reloading_time_left - _deltatime <= 0:
+                    selected_weapon.reloading_time_left = 0
+                    selected_weapon.reloading = False
+                    selected_weapon.finish_reload()
+                elif selected_weapon.reloading_time_left > 0:
+                    selected_weapon.reloading_time_left -= _deltatime
+
+            if issubclass(type(entity), Enemy):
+                decision = entity.think(level, _deltatime)
+                if decision is None: continue
+                if(decision.action == "Move"):
+                    fire_event("EntityMove", params=(entity, decision.move))
+                elif(decision.action == "TackleEntity"):
+                    fire_event("EntityTackleEntity", params=(entity, decision.target))  
 
     repeat_events = []
     while(not event_queue.empty()):
@@ -702,14 +717,22 @@ def tick():
             stdscr.clear()
             camera_pos = level.player.pos.copy()
 
+        elif(e.name == "TestEvent"):
+            level.player.weapons.append(WeaponManager.CreateWeapon(name="Shotgun"))
+            level.player.weapons.append(WeaponManager.CreateWeapon(name="Railgun"))
+            level.player.selected_weapon_index = 2
+
         elif(e.name == "PlayerShoot"):
             selected_weapon = (None if (level.player.selected_weapon_index == -1 or len(level.player.weapons) == 0)
-                                else level.player.weapons[level.player.selected_weapon_index])
-            
+                                    else level.player.weapons[level.player.selected_weapon_index])
+
             if selected_weapon is None: continue
-            if(selected_weapon.ammo <= 0): continue
+            if selected_weapon.ammo <= 0: continue
 
             selected_weapon.ammo -= 1
+
+            if selected_weapon.shooting_time_left > 0: continue
+
             play_sound(selected_weapon.sounds["shoot"][math.floor(random.random() * len(selected_weapon.sounds["shoot"]))])
             selected_weapon.shoot(level, level.player)
         

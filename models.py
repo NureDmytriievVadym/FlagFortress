@@ -19,6 +19,7 @@ class Vector2:
 
     def normalize(self):
         l = self.length()
+        if l == 0: l = 1
         return Vector2(round(self.y / l), round(self.x / l))
 
     def add(self, y: int, x: int):
@@ -60,7 +61,12 @@ class Vector2F(Vector2):
 
     def normalize(self):
         l = self.length()
-        return Vector2(self.y / l, self.x / l)
+        if l == 0: l = 1
+        return Vector2F(self.y / l, self.x / l)
+
+    def rotate(self, rad: float):
+        return Vector2F(math.sin(rad) * self.x + math.cos(rad) * self.y,
+                        math.cos(rad) * self.x - math.sin(rad) * self.y)
 
     def add(self, y: float, x: float):
         return Vector2F(self.y + y, self.x + x)
@@ -173,7 +179,7 @@ class Entity(GameObject):
         self.weapons_to_load = None
     
     @property
-    def direction(self) -> Vector2:
+    def direction(self) -> Vector2F:
         return self._direction.normalize()
     
     @direction.setter
@@ -295,12 +301,13 @@ class Hazard(GameObject):
         return obj
 
 class Projectile(GameObject):
-    def __init__(self, pos: Vector2, direction: Vector2, symbol: str = "+", speed: float = 5, lifetime: float = 10):
+    def __init__(self, pos: Vector2, direction: Vector2, symbol: str = "+", speed: float = 5, lifetime: float = 4):
         GameObject.__init__(self, pos, symbol)
         self.subpos = Vector2F(0, 0)
         self.direction = direction.normalize()
         self.speed = speed
         self.lifetime = lifetime
+        self.damage = 2
     
     @staticmethod
     def from_parent(obj: GameObject, direction: Vector2, symbol: str = "+", speed: float = 5) -> "Projectile":
@@ -311,6 +318,7 @@ class Projectile(GameObject):
         data["subpos"] = self.subpos.serialize()
         data["direction"] = self.direction.serialize()
         data["speed"] = self.speed
+        data["damage"] = self.damage
         return data
 
     @staticmethod
@@ -319,6 +327,7 @@ class Projectile(GameObject):
         obj.subpos = Vector2F.deserialize(data["subpos"])
         obj.direction = Vector2F.deserialize(data["direction"])
         obj.speed = data["speed"]
+        obj.damage = data["damage"]
         return obj
 
 class PlayerBullet(Projectile):
@@ -364,6 +373,7 @@ class GameLevel:
         self.starting_score = 100
         self.max_score = 100
         self.original = None
+        self.failed_to_load = False
         self.objects = objects[:]
         self.objects_to_load = None
         self.current_spawn_index = 0
@@ -384,6 +394,7 @@ class GameLevel:
         level.objects = []
         level.original = self
         level.objects_to_load = self.objects_to_load
+        level.failed_to_load = self.failed_to_load
         level.current_spawn_index = self.current_spawn_index
         level.size = self.size.copy()
         return level
