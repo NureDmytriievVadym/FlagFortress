@@ -47,9 +47,6 @@ class Enemy(Entity):
 # Vibe coded. Don't have enough time to implement and debug an A* algorithm, unfortunately
 _counter = itertools.count()
 
-def manhattan_distance(a: Vector2, b: Vector2) -> int:
-    return abs(a.y - b.y) + abs(a.x - b.x)
-
 def is_walkable(pos: Vector2, objects: list[GameObject]) -> bool:
     for o in objects:
         if o.deleted:
@@ -101,7 +98,7 @@ def astar_next_move(start: Vector2, goal: Vector2, level: GameLevel):
             if key not in g_score or tentative_g < g_score[key]:
                 came_from[key] = current
                 g_score[key] = tentative_g
-                f = tentative_g + manhattan_distance(neighbor, goal)
+                f = tentative_g + neighbor.manhattan_distance_to(goal)
                 heapq.heappush(open_set, (f, next(_counter), neighbor))
 
     return None  # no path
@@ -167,7 +164,7 @@ class Ghost(Enemy):
         
         self.think_cooldown = 1.0 / self.speed + (random.random() - 0.5) * 2 * self.speed_random_deviation
 
-        if(manhattan_distance(self.pos, level.player.pos) <= 1):
+        if(self.pos.manhattan_distance_to(level.player.pos) <= 1):
             self.think_cooldown = 2
             return EnemyAction("TackleEntity", target=level.player)
 
@@ -239,7 +236,7 @@ class Mercenary(Enemy):
         
         self.think_cooldown = 1.0 / self.speed + (random.random() - 0.5) * 2 * self.speed_random_deviation
 
-        if(manhattan_distance(self.pos, level.player.pos) <= 1):
+        if(self.pos.manhattan_distance_to(level.player.pos) <= 1):
             self.think_cooldown /= 2
             return EnemyAction("TackleEntity", target=level.player)
         

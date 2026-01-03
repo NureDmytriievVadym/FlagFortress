@@ -27,6 +27,9 @@ class Vector2:
 
     def mul(self, multiplier: float):
         return Vector2(round(self.y * multiplier), round(self.x * multiplier))
+    
+    def manhattan_distance_to(self, v: "Vector2") -> int:
+        return abs(v.y - self.y) + abs(v.x - self.x)
 
     def __eq__(self, value):
         return self.y == value.y and self.x == value.x
@@ -73,6 +76,9 @@ class Vector2F(Vector2):
 
     def mul(self, multiplier: float):
         return Vector2F(self.y * multiplier, self.x * multiplier)
+    
+    def manhattan_distance_to(self, v: "Vector2F") -> int:
+        return abs(v.y - self.y) + abs(v.x - self.x)
 
     def __eq__(self, value):
         return self.y == value.y and self.x == value.x

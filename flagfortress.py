@@ -935,7 +935,8 @@ def tick():
         elif(e.name == "PlayerMove"):
             level.player.direction = Vector2F.from_Vector2(e.params.normalize())
             move_object(level.player, e.params)
-            camera_pos = level.player.pos.copy()
+            if(camera_pos.manhattan_distance_to(level.player.pos) > 9):
+                camera_pos = level.player.pos.add(-1, 0)
         
         elif(e.name == "PlayerHurtFlashOver"):
             _hud_frame_symbol = '#'
