@@ -76,7 +76,7 @@ class Pistol(BaseWeapon):
         BaseWeapon.__init__(self)
         self.name = "Pistol"
         self.shorthand = "P"
-        self.damage = 4
+        self.damage = 3
         self.ammo = 5
         self.mag_size = 5
         self.ammo_reserve = 5
@@ -99,6 +99,7 @@ class Pistol(BaseWeapon):
                             math.cos(spread) * shooter.direction.x - math.sin(spread) * shooter.direction.y)
         bullet = Bullet(shooter.pos.copy(), direction, shooter)
         bullet.damage = self.damage
+        bullet.speed = 20
         level.add_object(bullet)
         self.shooting_time_left = 1.0 / self.firerate
         return True

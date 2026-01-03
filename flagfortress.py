@@ -63,8 +63,7 @@ BIG_TEXT = {
   ╚██╔╝  ██║   ██║██║   ██║    ██║     ██║   ██║╚════██║██╔══╝  
    ██║   ╚██████╔╝╚██████╔╝    ███████╗╚██████╔╝███████║███████╗
    ╚═╝    ╚═════╝  ╚═════╝     ╚══════╝ ╚═════╝ ╚══════╝╚══════╝""",
-   "FF": """
-   ▄████████    ▄████████ 
+   "FF": """   ▄████████    ▄████████ 
   ███    ███   ███    ███ 
   ███    █▀    ███    █▀  
  ▄███▄▄▄      ▄███▄▄▄     
@@ -77,7 +76,8 @@ BIG_TEXT = {
 MENUS = {
     "MainMenu": Menu(Vector2(20, 48), "FlagFortress", BIG_TEXT["FF"] + "\n\nCapture the Flag in your terminal!", [
         ["play_builtin", "Start Game"],
-        ["play_custom", "Play Custom Levels"],
+        ["tutorial", "Tutorial"],
+        ["play_custom", "Select Level"],
         ["open_options", "Options"],
         ["quit", "Quit"]
     ]),
@@ -136,7 +136,20 @@ MENUS = {
         ["try_again", "Try again"],
         ["to_mainmenu", "To Main Menu"]
     ]),
-    "LevelSelection": Menu(Vector2(32, 64), "Level selection", "", [])
+    "Tutorial": Menu(Vector2(24, 50), "", BIG_TEXT["FF"]
+                                                        + "\n\nFrag Fortress is a command-line game\n"
+                                                        + "based onthe Capture-the-Flag gamemode\n"
+                                                        + "To win you must get the flag\n"
+                                                        + "and bring it back to spawn\n\n"
+                                                        + "Controls:\n"
+                                                        + "Arrow Keys - Move\n"
+                                                        + "C - Dash\n"
+                                                        + "F - Shoot\n"
+                                                        + "R - Reload\n"
+                                                        + "P - Pause\n", [
+        ["to_mainmenu", "To Main Menu"]
+    ]),
+    "LevelSelection": Menu(Vector2(20, 48), "Level selection", "", [])
 }
 
 MENUS["MainMenu"].options_offset = Vector2(6, 0)
@@ -145,6 +158,7 @@ MENUS["Winscreen_Custom"].options_offset = Vector2(6, 0)
 MENUS["Options_Max_FPS"].options_offset = Vector2(1, 0)
 MENUS["Options_Volume"].options_offset = Vector2(1, 0)
 MENUS["Losescreen"].options_offset = Vector2(3, 0)
+MENUS["Tutorial"].options_offset = Vector2(10, 0)
 
 menu: Menu = None
 campaign_level: int = 0
@@ -591,6 +605,7 @@ def move_object(a: GameObject, move: Vector2):
 def change_gamestate(gamestate: Gamestate):
     global _gamestate
     global menu
+    global level
     global _previous_gamestate
     global _hud_frame_symbol, _hud_frame_symbol
 
@@ -616,7 +631,10 @@ def change_gamestate(gamestate: Gamestate):
         render_clear()
         render_hud()
     elif(gamestate == Gamestate.WINSCREEN):
-        menu = MENUS["Winscreen"] if _gamestate == Gamestate.INGAME and campaign_level < len(BUILTIN_LEVELS) - 1 else MENUS["Winscreen_Custom"]
+        winscreen = MENUS["Winscreen"] if _gamestate == Gamestate.INGAME and campaign_level < len(BUILTIN_LEVELS) - 1 else MENUS["Winscreen_Custom"]
+        menu = winscreen
+        winscreen.description = BIG_TEXT["YOU WIN"] + f"\n\nYour score: {get_score()} / {level.max_score}"
+
     elif(gamestate == Gamestate.LOSESCREEN):
         menu = MENUS["Losescreen"]
     
@@ -645,13 +663,15 @@ def process_menu_action(action: str):
     elif(action.startswith("select_level_")):
         lv_num = int(action.split('_')[-1])
         if play_level(level_sideloading.loaded_levels[lv_num]): change_gamestate(Gamestate.INGAME_CUSTOM)
+    elif(action == "tutorial"):
+        menu = MENUS["Tutorial"]
     elif(action == "open_options"):
         change_gamestate(Gamestate.OPTIONS)
         _options_saved_volume = config.VOLUME
         menu = MENUS["Options"]
     elif(action == "back"):
         if(_gamestate == Gamestate.INGAME_PAUSED): fire_event("Unpause")
-        elif(_gamestate == Gamestate.MAIN_MENU and menu == MENUS["LevelSelection"]):
+        elif(_gamestate == Gamestate.MAIN_MENU):
             render_clear()
             render_window_frame()
             menu = MENUS["MainMenu"]
